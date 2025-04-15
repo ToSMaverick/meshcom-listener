@@ -13,7 +13,7 @@ CONFIG_FILENAME = "config.json"
 # Standardkonfiguration, erweitert um den Logging-Abschnitt
 DEFAULT_CONFIG = {
     "database": {
-        "db_file": "meshcom_messages.db",
+        "db_file": "db/meshcom_messages.db",
         "table_name": "messages"
     },
     "listener": {

@@ -165,11 +165,10 @@ def start_udp_listener(
             try:
                 # Nur die Telegram-spezifische Konfig übergeben
                 forwarder_instance = TelegramForwarder(forwarding_config.telegram)
-                # Optional: Verbindung testen (ist async, benötigt asyncio.run oder ähnliches)
-                # try:
-                #    asyncio.run(forwarder_instance.test_connection())
-                # except Exception as test_e:
-                #    log.warning("Telegram Verbindungstest fehlgeschlagen: %s", test_e)
+
+                # Notifizierung an Telegram
+                forwarder_instance.send_text(text="*MeshCom Listener* gestartet\\!", parse_mode='MarkdownV2')
+               
             except (ValueError, ImportError, Exception) as e:
                  log.error("Fehler bei der Initialisierung des Telegram Forwarders. Forwarding bleibt deaktiviert.", exc_info=True)
                  forwarder_instance = None # Sicherstellen, dass es None ist bei Fehler

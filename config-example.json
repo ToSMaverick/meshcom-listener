@@ -1,0 +1,38 @@
+{
+    "database": {
+        "db_file": "db/meshcom_messages.db",
+        "table_name": "messages"
+    },
+    "listener": {
+        "host": "0.0.0.0",
+        "port": 1799,
+        "buffer_size": 2048,
+        "store_types": [
+            "msg"
+        ]
+    },
+    "logging": {
+        "console": {
+            "level": "INFO"
+        },
+        "file": {
+            "path": "logs/MeshComListener.log",
+            "level": "INFO",
+            "rolling_interval": "day",
+            "retained_file_count_limit": 7,
+            "output_template": "[%(asctime)s %(levelname)s] %(name)s: %(message)s"
+        }
+    },
+    "forwarding": {
+        "enabled": false,
+        "provider": "telegram",
+        "rules": [
+            {"type": "msg", "dst": "*"},
+            {"type": "pos"}
+        ],
+        "telegram": {
+            "bot_token": "YOUR_BOT_TOKEN_HERE",
+            "chat_id": "YOUR_TARGET_CHAT_ID_HERE"
+        }
+    }
+}

@@ -72,12 +72,16 @@ def start_udp_listener(listener_config: SimpleNamespace, db_handler: DatabaseHan
                     if msg_src:
                         # Nimmt den ersten Eintrag vor Komma, entfernt eventuelle Leerzeichen
                         msg_src = msg_src.split(',')[0].strip()
+                    msg_dst = message_dict.get('dst')
+                    if not msg_dst:
+                        msg_dst = None # None setzen, wenn nicht vorhanden, wird von SQLite als NULL interpretiert
                     msg_type = message_dict.get('type')
 
                     # 5. In Datenbank speichern
                     db_handler.save_message(
                         msg_id=msg_id,
                         source=msg_src,
+                        dest=msg_dst,
                         msg_type=msg_type,
                         received_time=received_time,
                         raw_message_str=message_str # Den dekodierten String speichern

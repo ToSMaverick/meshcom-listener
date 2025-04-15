@@ -98,7 +98,8 @@ class DatabaseHandler:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 msg_id TEXT,
                 type TEXT,
-                source TEXT,
+                src TEXT,
+                dst TEXT, 
                 received_at TIMESTAMP NOT NULL,
                 raw_message TEXT NOT NULL
             )
@@ -106,7 +107,8 @@ class DatabaseHandler:
 
             # Indizes für häufige Abfragen erstellen (falls sie nicht existieren)
             cursor.execute(f"CREATE INDEX IF NOT EXISTS idx_{self.table_name}_type ON {self.table_name} (type)")
-            cursor.execute(f"CREATE INDEX IF NOT EXISTS idx_{self.table_name}_source ON {self.table_name} (source)")
+            cursor.execute(f"CREATE INDEX IF NOT EXISTS idx_{self.table_name}_src ON {self.table_name} (src)")
+            cursor.execute(f"CREATE INDEX IF NOT EXISTS idx_{self.table_name}_dst ON {self.table_name} (dst)")
             cursor.execute(f"CREATE INDEX IF NOT EXISTS idx_{self.table_name}_received_at ON {self.table_name} (received_at)")
 
 
@@ -116,7 +118,7 @@ class DatabaseHandler:
             log.error("SQLite-Fehler beim Erstellen der Tabelle '%s': %s", self.table_name, e, exc_info=True)
             raise # Fehler weitergeben
 
-    def save_message(self, msg_id: str | None, source: str | None, msg_type: str | None, received_time: datetime, raw_message_str: str):
+    def save_message(self, msg_id: str | None, source: str | None, dest: str | None, msg_type: str | None, received_time: datetime, raw_message_str: str):
         """
         Speichert eine einzelne Nachricht in der Datenbank.
 
@@ -135,9 +137,9 @@ class DatabaseHandler:
         try:
             cursor = self.connection.cursor()
             cursor.execute(f"""
-            INSERT INTO {self.table_name} (msg_id, source, type, received_at, raw_message)
-            VALUES (?, ?, ?, ?, ?)
-            """, (msg_id, source, msg_type, received_time, raw_message_str))
+            INSERT INTO {self.table_name} (msg_id, src, dst, type, received_at, raw_message)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """, (msg_id, source, dest, msg_type, received_time, raw_message_str))
             self.connection.commit()
             log.debug("Nachricht erfolgreich gespeichert (ID: %s).", cursor.lastrowid)
             return cursor.lastrowid # Gibt die ID des eingefügten Datensatzes zurück

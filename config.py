@@ -10,7 +10,7 @@ log = logging.getLogger(__name__)
 
 CONFIG_FILENAME = "config.json"
 
-# Standardkonfiguration, erweitert um den Logging-Abschnitt
+# Standardkonfiguration
 DEFAULT_CONFIG = {
     "database": {
         "db_file": "db/meshcom_messages.db",
@@ -19,18 +19,35 @@ DEFAULT_CONFIG = {
     "listener": {
         "host": "0.0.0.0",
         "port": 1799,
-        "buffer_size": 2048
+        "buffer_size": 2048,
+        "store_types": [ # NEU: Nur diese Typen speichern
+            "msg"
+            # "pos" standardmäßig ausgelassen
+        ]
     },
     "logging": {
         "console": {
-            "level": "INFO"  # Gültige Level: DEBUG, INFO, WARNING, ERROR, CRITICAL
+            "level": "INFO"
         },
         "file": {
             "path": "logs/MeshComListener.log",
             "level": "INFO",
-            "rolling_interval": "day", # Wird von logger.py interpretiert (z.B. 'D' für TimedRotatingFileHandler)
-            "retained_file_count_limit": 7, # Wird von logger.py interpretiert (backupCount)
-            "output_template": "[%(asctime)s %(levelname)s] %(name)s: %(message)s" # Beispiel-Template
+            "rolling_interval": "day",
+            "retained_file_count_limit": 7,
+            "output_template": "[%(asctime)s %(levelname)s] %(name)s: %(message)s"
+        }
+    },
+    "forwarding": { # NEU: Komplette Sektion für Weiterleitung
+        "enabled": False,
+        "provider": "telegram", # Aktuell nur Telegram unterstützt
+        "rules": [ # Leere Liste als Default
+            # Beispielregeln (werden aus config.json geladen, falls vorhanden):
+            # {"type": "msg", "dst": "232"},  # Leite Nachrichten an die AT-Gruppe weiter
+            # {"type": "pos"}              # Leite alle Positionsmeldungen weiter
+        ],
+        "telegram": {
+            "bot_token": "YOUR_BOT_TOKEN_HERE", # Muss in config.json gesetzt werden!
+            "chat_id": "YOUR_TARGET_CHAT_ID_HERE" # Muss in config.json gesetzt werden!
         }
     }
 }
@@ -39,7 +56,7 @@ class ConfigLoader:
     """
     Lädt die Konfiguration aus einer JSON-Datei oder erstellt eine Standarddatei,
     falls diese nicht existiert. Stellt die Konfiguration über Attribute
-    bereit (z.B. config.database.db_file, config.logging.file.path).
+    bereit (z.B. config.database.db_file, config.listener.store_types, config.forwarding.enabled).
     Verwendet das logging-Modul für Ausgaben.
     """
     def __init__(self, filename=CONFIG_FILENAME):
@@ -51,7 +68,8 @@ class ConfigLoader:
         self.filename = filename
         self.database = None
         self.listener = None
-        self.logging_config = None # Benennen wir das Attribut eindeutig
+        self.logging_config = None
+        self.forwarding = None
 
         config_data = self._load_or_create()
         self._populate_attributes(config_data)
@@ -77,15 +95,16 @@ class ConfigLoader:
             log.error("Unerwarteter Fehler beim Lesen von '%s'.", self.filename, exc_info=True) # Mit Traceback loggen
             raise # Bei anderen Fehlern auch abbrechen
 
+
     def _create_default_config(self):
         """Erstellt die Standardkonfigurationsdatei."""
         log.warning("Erstelle Standardkonfiguration in '%s'.", self.filename)
         try:
             # Sicherstellen, dass das Verzeichnis existiert, falls der Pfad komplexer ist
-            log_dir = os.path.dirname(self.filename)
-            if log_dir and not os.path.exists(log_dir):
-                 os.makedirs(log_dir, exist_ok=True)
-                 log.info("Verzeichnis '%s' für Konfigurationsdatei erstellt.", log_dir)
+            conf_dir = os.path.dirname(self.filename)
+            if conf_dir and not os.path.exists(conf_dir):
+                 os.makedirs(conf_dir, exist_ok=True)
+                 log.info("Verzeichnis '%s' für Konfigurationsdatei erstellt.", conf_dir)
 
             with open(self.filename, 'w', encoding='utf-8') as f:
                 json.dump(DEFAULT_CONFIG, f, indent=4, ensure_ascii=False)
@@ -114,7 +133,6 @@ class ConfigLoader:
                 merged[key] = value # Überschreiben oder hinzufügen
         return merged
 
-
     def _load_or_create(self):
         """Lädt die Konfiguration oder erstellt sie, falls nötig."""
         loaded_config = self._load_config_file()
@@ -136,9 +154,11 @@ class ConfigLoader:
         db_settings = config_data.get("database", DEFAULT_CONFIG["database"])
         listener_settings = config_data.get("listener", DEFAULT_CONFIG["listener"])
         logging_settings = config_data.get("logging", DEFAULT_CONFIG["logging"])
+        forwarding_settings = config_data.get("forwarding", DEFAULT_CONFIG["forwarding"]) # NEU
 
         self.database = SimpleNamespace(**db_settings)
-        self.listener = SimpleNamespace(**listener_settings)
+        # SimpleNamespace(**dict) fügt alle Keys aus dem Dict als Attribute hinzu
+        self.listener = SimpleNamespace(**listener_settings) # store_types wird automatisch hinzugefügt
 
         # Für Logging auch die inneren Strukturen (console, file) als Namespace anlegen
         log_console_settings = logging_settings.get("console", DEFAULT_CONFIG["logging"]["console"])
@@ -147,27 +167,43 @@ class ConfigLoader:
              console=SimpleNamespace(**log_console_settings),
              file=SimpleNamespace(**log_file_settings)
         )
-        log.debug("Konfigurationsattribute erfolgreich erstellt.")
 
+        # NEU: Für Forwarding ebenfalls verschachtelte Namespaces erstellen
+        telegram_settings = forwarding_settings.get("telegram", DEFAULT_CONFIG["forwarding"]["telegram"])
+        self.forwarding = SimpleNamespace(
+            enabled=forwarding_settings.get("enabled", DEFAULT_CONFIG["forwarding"]["enabled"]),
+            provider=forwarding_settings.get("provider", DEFAULT_CONFIG["forwarding"]["provider"]),
+            rules=forwarding_settings.get("rules", DEFAULT_CONFIG["forwarding"]["rules"]),
+            telegram=SimpleNamespace(**telegram_settings)
+        )
+
+        log.debug("Konfigurationsattribute erfolgreich erstellt.")
 
     def _validate_config(self):
         """Prüft grundlegende Typen und Werte der Konfiguration."""
         try:
-            # Datenbank-Validierung
+            # --- Datenbank-Validierung ---
             if not isinstance(self.database.db_file, str) or not self.database.db_file:
                 raise ValueError("Ungültiger oder fehlender Wert für database.db_file.")
             if not isinstance(self.database.table_name, str) or not self.database.table_name:
                 raise ValueError("Ungültiger oder fehlender Wert für database.table_name.")
 
-            # Listener-Validierung
+            # --- Listener-Validierung ---
             if not isinstance(self.listener.host, str):
                 raise ValueError("Ungültiger oder fehlender Wert für listener.host.")
             if not isinstance(self.listener.port, int) or not (0 < self.listener.port < 65536):
                 raise ValueError(f"Ungültiger Wert für listener.port '{self.listener.port}' (muss eine Zahl zwischen 1 und 65535 sein).")
             if not isinstance(self.listener.buffer_size, int) or self.listener.buffer_size <= 0:
                 raise ValueError(f"Ungültiger Wert für listener.buffer_size '{self.listener.buffer_size}' (muss eine positive Zahl sein).")
+            # NEU: store_types prüfen
+            if not hasattr(self.listener, 'store_types') or not isinstance(self.listener.store_types, list):
+                 raise ValueError("Ungültiger oder fehlender Wert für listener.store_types (muss eine Liste sein).")
+            if not all(isinstance(item, str) for item in self.listener.store_types):
+                 raise ValueError("listener.store_types darf nur Strings enthalten.")
+            log.debug("Zu speichernde Typen: %s", self.listener.store_types)
 
-            # Logging-Validierung
+
+            # --- Logging-Validierung ---
             valid_log_levels = logging._nameToLevel.keys() # Holt die Namen der Log-Level
             if not isinstance(self.logging_config.console.level, str) or self.logging_config.console.level.upper() not in valid_log_levels:
                 raise ValueError(f"Ungültiger Wert für logging.console.level '{self.logging_config.console.level}'. Gültige Werte: {list(valid_log_levels)}")
@@ -191,13 +227,55 @@ class ConfigLoader:
             if not isinstance(self.logging_config.file.output_template, str): # Keine Prüfung auf leeren String, da evtl. gültig
                  raise ValueError("Ungültiger oder fehlender Wert für logging.file.output_template.")
 
+            # --- NEU: Forwarding-Validierung ---
+            if not hasattr(self.forwarding, 'enabled') or not isinstance(self.forwarding.enabled, bool):
+                raise ValueError("Ungültiger oder fehlender Wert für forwarding.enabled (muss true oder false sein).")
+            if not hasattr(self.forwarding, 'provider') or not isinstance(self.forwarding.provider, str) or not self.forwarding.provider:
+                raise ValueError("Ungültiger oder fehlender Wert für forwarding.provider (muss ein String sein).")
+            if self.forwarding.provider.lower() != "telegram":
+                 log.warning("Forwarding Provider '%s' ist nicht 'telegram'. Aktuell wird nur Telegram unterstützt.", self.forwarding.provider)
+
+            if not hasattr(self.forwarding, 'rules') or not isinstance(self.forwarding.rules, list):
+                 raise ValueError("Ungültiger oder fehlender Wert für forwarding.rules (muss eine Liste sein).")
+            # Optionale tiefere Prüfung der Regeln
+            for i, rule in enumerate(self.forwarding.rules):
+                 if not isinstance(rule, dict):
+                     raise ValueError(f"Ungültige Regel in forwarding.rules an Index {i}: Muss ein Dictionary sein.")
+                 # Hier könnten weitere Prüfungen für Keys wie 'type', 'dst' etc. folgen
+                 for key, value in rule.items():
+                     if key not in ['type', 'dst', 'src']: # Erlaubte Schlüssel für Regeln (Beispiel)
+                         log.warning("Unbekannter Schlüssel '%s' in forwarding.rules[%d]. Wird ignoriert.", key, i)
+                     if not isinstance(value, str):
+                         raise ValueError(f"Ungültiger Wert für Schlüssel '{key}' in forwarding.rules an Index {i}: Muss ein String sein.")
+
+
+            if not hasattr(self.forwarding, 'telegram'):
+                 raise ValueError("Fehlende Sektion 'telegram' in der forwarding-Konfiguration.")
+            if not hasattr(self.forwarding.telegram, 'bot_token') or not isinstance(self.forwarding.telegram.bot_token, str):
+                 raise ValueError("Ungültiger oder fehlender Wert für forwarding.telegram.bot_token.")
+            if not hasattr(self.forwarding.telegram, 'chat_id') or not isinstance(self.forwarding.telegram.chat_id, str):
+                 raise ValueError("Ungültiger oder fehlender Wert für forwarding.telegram.chat_id.")
+
+            # Warnung, wenn Forwarding aktiviert ist, aber die Default-Werte noch drinstehen
+            if self.forwarding.enabled:
+                 log.info("Forwarding ist aktiviert (Provider: %s).", self.forwarding.provider)
+                 if "YOUR_BOT_TOKEN_HERE" in self.forwarding.telegram.bot_token:
+                     log.warning("Forwarding ist aktiviert, aber forwarding.telegram.bot_token scheint ein Platzhalter zu sein!")
+                 if "YOUR_TARGET_CHAT_ID_HERE" in self.forwarding.telegram.chat_id:
+                     log.warning("Forwarding ist aktiviert, aber forwarding.telegram.chat_id scheint ein Platzhalter zu sein!")
+            else:
+                 log.info("Forwarding ist deaktiviert.")
+
+
             log.info("Konfiguration erfolgreich validiert.")
 
         except ValueError as e:
              log.error("Validierungsfehler in der Konfiguration: %s", e)
              raise # Fehler weitergeben, damit das Hauptprogramm abbrechen kann
         except AttributeError as e:
-             log.error("Fehlendes Attribut während der Validierung (wahrscheinlich fehlende Sektion/Key in config.json und Defaults): %s", e)
+             # Dieser Fehler sollte durch die .get() Defaults in _populate_attributes unwahrscheinlicher sein,
+             # aber zur Sicherheit drinlassen, falls doch mal eine ganze Sektion fehlt und die Defaults nicht greifen.
+             log.error("Fehlendes Attribut während der Validierung (wahrscheinlich fehlende Sektion/Key in config.json und Defaults): %s", e, exc_info=True)
              raise ValueError(f"Fehlende Konfigurationseinstellung: {e}")
 
 
@@ -206,26 +284,37 @@ if __name__ == "__main__":
     # WICHTIG: Damit die Logs aus diesem Testlauf sichtbar sind,
     # muss das Logging *minimal* konfiguriert werden, BEVOR ConfigLoader genutzt wird.
     # Im echten Programm passiert das zentral in logger.py NACH dem Laden der Config.
-    logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(name)s: %(message)s')
+    logging.basicConfig(level=logging.DEBUG, format='[%(levelname)s] %(name)s: %(message)s')
 
     log.info("Teste ConfigLoader...")
     try:
         # Versuche, die Konfiguration zu laden/erstellen
-        config = ConfigLoader()
+        # Zum Testen kann man auch explizit eine nicht existierende Datei angeben:
+        # test_config_file = "nonexistent_config.json"
+        # if os.path.exists(test_config_file): os.remove(test_config_file)
+        # config = ConfigLoader(filename=test_config_file)
+
+        config = ConfigLoader() # Lädt/erstellt config.json
 
         # Zugriff auf die Konfigurationswerte
         log.info("--- Geladene/Erstellte Konfiguration ---")
-        log.info("Datenbank Datei: %s", config.database.db_file)
-        log.info("Datenbank Tabelle: %s", config.database.table_name)
+        log.info("DB Datei: %s", config.database.db_file)
+        log.info("DB Tabelle: %s", config.database.table_name)
         log.info("Listener Host: %s", config.listener.host)
-        log.info("Listener Port: %d", config.listener.port) # %d für Integer
+        log.info("Listener Port: %d", config.listener.port)
         log.info("Listener Puffergröße: %d", config.listener.buffer_size)
-        log.info("Logging Konsole Level: %s", config.logging_config.console.level)
-        log.info("Logging Datei Pfad: %s", config.logging_config.file.path)
-        log.info("Logging Datei Level: %s", config.logging_config.file.level)
-        log.info("Logging Datei Rolling Interval: %s", config.logging_config.file.rolling_interval)
-        log.info("Logging Datei Anzahl behalten: %d", config.logging_config.file.retained_file_count_limit)
-        log.info("Logging Datei Template: %s", config.logging_config.file.output_template)
+        log.info("Listener zu speichernde Typen: %s", config.listener.store_types) # NEU
+        log.info("Log Konsole Level: %s", config.logging_config.console.level)
+        log.info("Log Datei Pfad: %s", config.logging_config.file.path)
+        log.info("Log Datei Level: %s", config.logging_config.file.level)
+        log.info("Log Datei Rolling Interval: %s", config.logging_config.file.rolling_interval)
+        log.info("Log Datei Anzahl behalten: %d", config.logging_config.file.retained_file_count_limit)
+        log.info("Log Datei Template: %s", config.logging_config.file.output_template)
+        log.info("Forwarding Aktiviert: %s", config.forwarding.enabled) # NEU
+        log.info("Forwarding Provider: %s", config.forwarding.provider) # NEU
+        log.info("Forwarding Regeln: %s", config.forwarding.rules) # NEU
+        log.info("Forwarding Telegram Token: %s... (versteckt)", config.forwarding.telegram.bot_token[:5]) # NEU (nur Anfang loggen)
+        log.info("Forwarding Telegram Chat ID: %s", config.forwarding.telegram.chat_id) # NEU
         log.info("--- Ende Konfiguration ---")
 
 
@@ -233,7 +322,7 @@ if __name__ == "__main__":
         if os.path.exists(CONFIG_FILENAME):
              log.info("Datei '%s' existiert.", CONFIG_FILENAME)
         else:
-             log.warning("Datei '%s' konnte nicht erstellt werden (wahrscheinlich Berechtigungsproblem).", CONFIG_FILENAME)
+             log.warning("Datei '%s' konnte nicht erstellt werden.", CONFIG_FILENAME)
 
     except ValueError as e:
         log.error("Validierungsfehler in der Konfiguration: %s", e)

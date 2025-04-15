@@ -1,4 +1,6 @@
 /__pycache__
+/.venv
 /db
 /logs
 .DS_Store
+config.json

@@ -1,12 +1,23 @@
+# docker-compose.yaml (angepasst)
 version: "3.9"
 services:
   meshcom-listener:
-    image: python:latest
+    build: . # Sagt Docker Compose, das Image aus dem Dockerfile im aktuellen Verzeichnis zu bauen
+    # Oder, wenn du manuell baust:
+    # image: mein-meshcom-listener:latest
     container_name: meshcom-listener
-    working_dir: /app
+    working_dir: /app # Bleibt sinnvoll, obwohl im Dockerfile gesetzt
     volumes:
-      - ./:/app                # Mount the current directory into the container
-    entrypoint: ["bash", "entrypoint.sh"]  # Use the entrypoint.sh script
-    restart: unless-stopped    # Restart policy for stable operation
+      # Mount nur die Konfigurationsdatei (read-only empfohlen)
+      - ./config.json:/app/config.json:ro
+      # Mount das Verzeichnis für die SQLite-DB
+      - ./db:/app/db
+      # Mount das Verzeichnis für die Log-Dateien
+      - ./logs:/app/logs
+    restart: unless-stopped
     environment:
-      - PYTHONUNBUFFERED=1     # Ensure Python logs are shown in real-time
+      # PYTHONUNBUFFERED ist jetzt im Dockerfile, kann hier aber bleiben oder entfernt werden.
+      # NEU: Hier sensible Daten wie den Bot-Token übergeben!
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN} # Liest aus .env-Datei oder Umgebung
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
+      # Weitere Umgebungsvariablen bei Bedarf

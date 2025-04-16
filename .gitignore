@@ -3,4 +3,5 @@
 /db
 /logs
 .DS_Store
+.env
 config.json

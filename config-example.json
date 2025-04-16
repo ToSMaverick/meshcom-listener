@@ -31,8 +31,8 @@
             {"type": "pos"}
         ],
         "telegram": {
-            "bot_token": "YOUR_BOT_TOKEN_HERE",
-            "chat_id": "YOUR_TARGET_CHAT_ID_HERE"
+            "bot_token": "SET_VIA_ENV_OR_CONFIG",
+            "chat_id": "SET_VIA_ENV_OR_CONFIG"
         }
     }
 }

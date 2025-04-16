@@ -1,0 +1,13 @@
+# .dockerignore
+.git
+.venv
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.env
+db/ # Datenbank nicht ins Image!
+logs/ # Logs nicht ins Image!
+*.db # Generell keine DBs ins Image
+*.log # Generell keine Logs ins Image

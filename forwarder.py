@@ -83,8 +83,8 @@ class TelegramForwarder:
         msg_id = escape_markdown_v2(message_dict.get('msg_id'))
 
         # Titelzeile basierend auf Typ
-        title = f"📡 Neue `{msg_type_raw}` Nachricht" # Verwende rohen Typ in Backticks
-        lines.append(f"*{escape_markdown_v2(title)}*") # Escape den gesamten Titel
+        title = f"📡 Neue `{msg_type}` Nachricht" # Verwende Typ in Backticks
+        lines.append(f"*{title}*")
 
         lines.append(f"*Von:* `{src}`") # Src ist schon escaped, ok in Backticks
 
@@ -97,10 +97,7 @@ class TelegramForwarder:
         # Typ-spezifische Formatierung
         if msg_type_raw == 'msg' and 'msg' in message_dict:
             message_text = message_dict['msg']
-            # Escaping innerhalb von ``` ist nicht nötig/erwünscht
-            message_text = message_text.replace('```', '`\u200b`\u200b`')
-            # Escape nur den Text VOR dem Code-Block
-            lines.append(f"*{escape_markdown_v2('Nachricht:')}* \n```\n{message_text}\n```")
+            lines.append(f"*Nachricht:*\n{escape_markdown_v2(message_text)}")
         elif msg_type_raw == 'pos' and 'lat' in message_dict and 'long' in message_dict:
             lat = message_dict.get('lat', '?')
             lon = message_dict.get('long', '?')
@@ -109,7 +106,7 @@ class TelegramForwarder:
             lines.append(f"*{escape_markdown_v2('Position:')}* `{lat}, {lon}`")
             if alt is not None:
                 # Altitude wird in Fuß angegeben und muss in Meter umgerechnet werden
-                alt_meter = float(alt) * 0.3048
+                alt_meter = round(float(alt) * 0.3048, 1)
                 # Zeige Höhe direkt in Backticks an, OHNE sie vorher zu escapen
                 lines.append(f"*{escape_markdown_v2('Höhe:')}* `{alt_meter}m`")
 
@@ -118,18 +115,6 @@ class TelegramForwarder:
             # Link-Text enthält keine Sonderzeichen, braucht kein Escaping
             # Die Link-Syntax selbst braucht kein Escaping
             lines.append(f"[📍 Auf Karte anzeigen]({map_link})")
-        elif msg_type_raw == 'ack' and 'ack_id' in message_dict:
-            # ack_id wird escaped und in Backticks gesetzt, ok
-            ack_id_escaped = escape_markdown_v2(message_dict['ack_id'])
-            lines.append(f"*{escape_markdown_v2('Ack ID:')}* `{ack_id_escaped}`")
-        elif msg_type_raw == 'status' and 'msg' in message_dict:
-            # Status-Text wird normal escaped (keine Backticks/Code-Blocks)
-            status_text = escape_markdown_v2(message_dict['msg'])
-            lines.append(f"*{escape_markdown_v2('Status:')}* {status_text}")
-        elif msg_type_raw == 'bulletin' and 'msg' in message_dict:
-            # Bulletin-Text wird normal escaped
-            bulletin_text = escape_markdown_v2(message_dict['msg'])
-            lines.append(f"*{escape_markdown_v2('Bulletin:')}* {bulletin_text}")
 
         # Fallback für unbekannte Typen
         if len(lines) <= 4: # Wenn nur die Standard-Header drin sind

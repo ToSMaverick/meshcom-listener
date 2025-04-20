@@ -73,56 +73,68 @@ class TelegramForwarder:
             raise
 
     def _format_message_markdown(self, message_dict: dict) -> str:
-        # ... (Diese Funktion bleibt exakt gleich wie vorher) ...
         """Formatiert das Nachrichten-Dictionary in einen MarkdownV2-String."""
         lines = []
-        # Sicher extrahieren und für Markdown escapen
-        msg_type = escape_markdown_v2(message_dict.get('type', 'N/A'))
+        # Sicher extrahieren und für Markdown escapen (NUR für Text außerhalb von Code-Blöcken nötig)
+        msg_type_raw = message_dict.get('type', 'N/A')
+        msg_type = escape_markdown_v2(msg_type_raw) # Typ wird direkt verwendet
         src = escape_markdown_v2(message_dict.get('src', 'N/A'))
         dst = escape_markdown_v2(message_dict.get('dst'))
         msg_id = escape_markdown_v2(message_dict.get('msg_id'))
 
         # Titelzeile basierend auf Typ
-        title = f"📡 Neue `{msg_type}` Nachricht"
-        lines.append(f"*{title}*")
-        lines.append(f"*Von:* `{src}`")
+        title = f"📡 Neue `{msg_type_raw}` Nachricht" # Verwende rohen Typ in Backticks
+        lines.append(f"*{escape_markdown_v2(title)}*") # Escape den gesamten Titel
 
-        # Ziel nur anzeigen, wenn es nicht '*' oder None ist
-        if dst and dst != '\*': # '*' wurde escaped zu '\*'
-            lines.append(f"*An:* `{dst}`")
+        lines.append(f"*Von:* `{src}`") # Src ist schon escaped, ok in Backticks
+
+        if dst and dst != '\*':
+            lines.append(f"*An:* `{dst}`") # Dst ist schon escaped, ok in Backticks
 
         if msg_id:
-            lines.append(f"*ID:* `{msg_id}`")
+            lines.append(f"*ID:* `{msg_id}`") # ID ist schon escaped, ok in Backticks
 
         # Typ-spezifische Formatierung
-        if msg_type == 'msg' and 'msg' in message_dict:
-            message_text = message_dict['msg'] # Nicht escapen, da im Code-Block
-            message_text = message_text.replace('```', '`\u200b`\u200b`') # Zero-width spaces
-            lines.append(f"*Nachricht:* \n```\n{message_text}\n```")
-        elif msg_type == 'pos' and 'lat' in message_dict and 'long' in message_dict:
+        if msg_type_raw == 'msg' and 'msg' in message_dict:
+            message_text = message_dict['msg']
+            # Escaping innerhalb von ``` ist nicht nötig/erwünscht
+            message_text = message_text.replace('```', '`\u200b`\u200b`')
+            # Escape nur den Text VOR dem Code-Block
+            lines.append(f"*{escape_markdown_v2('Nachricht:')}* \n```\n{message_text}\n```")
+        elif msg_type_raw == 'pos' and 'lat' in message_dict and 'long' in message_dict:
             lat = message_dict.get('lat', '?')
             lon = message_dict.get('long', '?')
             alt = message_dict.get('alt')
-            lat_str = escape_markdown_v2(str(lat))
-            lon_str = escape_markdown_v2(str(lon))
-            lines.append(f"*Position:* `{lat_str}, {lon_str}`")
+            # Zeige Lat/Lon direkt in Backticks an, OHNE sie vorher zu escapen
+            lines.append(f"*{escape_markdown_v2('Position:')}* `{lat}, {lon}`")
             if alt is not None:
-                lines.append(f"*Höhe:* `{escape_markdown_v2(str(alt))}m`")
-            map_link = f"[https://www.openstreetmap.org/?mlat=](https://www.openstreetmap.org/?mlat=){lat}&mlon={lon}#map=15/{lat}/{lon}"
-            lines.append(f"[📍 Auf Karte anzeigen]({map_link})")
-        elif msg_type == 'ack' and 'ack_id' in message_dict:
-            ack_id = escape_markdown_v2(message_dict['ack_id'])
-            lines.append(f"*Ack ID:* `{ack_id}`")
-        elif msg_type == 'status' and 'msg' in message_dict:
-            status_text = escape_markdown_v2(message_dict['msg'])
-            lines.append(f"*Status:* {status_text}")
-        elif msg_type == 'bulletin' and 'msg' in message_dict:
-             bulletin_text = escape_markdown_v2(message_dict['msg'])
-             lines.append(f"*Bulletin:* {bulletin_text}")
+                 # Zeige Höhe direkt in Backticks an, OHNE sie vorher zu escapen
+                 lines.append(f"*{escape_markdown_v2('Höhe:')}* `{alt}m`")
 
-        if len(lines) <= 4:
+            # URL für den Link NICHT escapen
+            map_link = f"https://www.openstreetmap.org/?mlat={lat}&mlon={lon}#map=15/{lat}/{lon}"
+            # Link-Text enthält keine Sonderzeichen, braucht kein Escaping
+            # Die Link-Syntax selbst braucht kein Escaping
+            lines.append(f"[📍 Auf Karte anzeigen]({map_link})")
+        elif msg_type_raw == 'ack' and 'ack_id' in message_dict:
+             # ack_id wird escaped und in Backticks gesetzt, ok
+             ack_id_escaped = escape_markdown_v2(message_dict['ack_id'])
+             lines.append(f"*{escape_markdown_v2('Ack ID:')}* `{ack_id_escaped}`")
+        elif msg_type_raw == 'status' and 'msg' in message_dict:
+            # Status-Text wird normal escaped (keine Backticks/Code-Blocks)
+            status_text = escape_markdown_v2(message_dict['msg'])
+            lines.append(f"*{escape_markdown_v2('Status:')}* {status_text}")
+        elif msg_type_raw == 'bulletin' and 'msg' in message_dict:
+             # Bulletin-Text wird normal escaped
+             bulletin_text = escape_markdown_v2(message_dict['msg'])
+             lines.append(f"*{escape_markdown_v2('Bulletin:')}* {bulletin_text}")
+
+        # Fallback für unbekannte Typen
+        if len(lines) <= 4: # Wenn nur die Standard-Header drin sind
              raw_json = json.dumps(message_dict, ensure_ascii=False, separators=(',', ':'))
-             lines.append(f"*Rohdaten:* `{escape_markdown_v2(raw_json[:200])}{'...' if len(raw_json) > 200 else ''}`")
+             # Zeige Rohdaten in Backticks OHNE Escaping des Inhalts
+             raw_json_display = f"{raw_json[:200]}{'...' if len(raw_json) > 200 else ''}"
+             lines.append(f"*{escape_markdown_v2('Rohdaten:')}* `{raw_json_display}`")
 
         return "\n".join(lines)
 

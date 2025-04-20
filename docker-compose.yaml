@@ -14,10 +14,18 @@ services:
       - ./db:/app/db
       # Mount das Verzeichnis für die Log-Dateien
       - ./logs:/app/logs
+    ports:
+      - "1799:1799/udp" # Host-Port 1799 auf Container-Port 1799 für UDP mappen
+    #networks: # Hier kannst du Netzwerke definieren, wenn nötig
+    #  - default
     restart: unless-stopped
     environment:
       # PYTHONUNBUFFERED ist jetzt im Dockerfile, kann hier aber bleiben oder entfernt werden.
-      # NEU: Hier sensible Daten wie den Bot-Token übergeben!
+      # NEU: Hier sensible Daten wie den Bot-Token   bergeben!
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN} # Liest aus .env-Datei oder Umgebung
       - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
       # Weitere Umgebungsvariablen bei Bedarf
+#networks:
+#  default:
+#    name: your_network_name # Ersetze durch deinen Netzwerk-Namen
+#    external: true

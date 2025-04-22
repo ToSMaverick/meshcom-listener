@@ -88,7 +88,7 @@ This method uses Docker Compose to build and run the listener in an isolated con
 4. **Build and Run with Docker Compose:**
 
     ```bash
-    docker-compose up -d --build
+    docker compose up -d --build
     ```
 
     * `--build` forces Docker Compose to build the image based on the `Dockerfile` if it doesn't exist or if changes were made.
@@ -144,38 +144,59 @@ Use this method if you prefer not to use Docker or for development purposes.
 
 ## Configuration Details (`config.json`)
 
+The application is configured via the `config.json` file. If this file does not exist upon startup, it will be created automatically based on default values (you might find a `config-example.json` in the repository as a reference).
+
 * **`database`**:
-  * `db_file`: Path to the SQLite database file. Relative paths are interpreted from the application's root directory (`/app` inside Docker). Default: `db/meshcom_messages.db`.
-  * `table_name`: Name of the table where messages are stored. Default: `messages`.
+    * `db_file`: Path to the SQLite database file. Relative paths are interpreted from the application's root directory (`/app` inside Docker). Default: `db/meshcom_messages.db`.
+    * `table_name`: Name of the table where messages are stored. Default: `messages`.
 * **`listener`**:
-  * `host`: IP address to listen on. `0.0.0.0` listens on all available network interfaces.
-  * `port`: UDP port to listen on (MeshCom usually uses 1799).
-  * `buffer_size`: Max size of UDP packets to receive.
-  * `store_types`: A list of message `type` strings. Only messages with a type present in this list will be saved to the database. Example: `["msg", "pos"]`.
+    * `host`: IP address to listen on. `0.0.0.0` listens on all available network interfaces.
+    * `port`: UDP port to listen on (MeshCom usually uses 1799).
+    * `buffer_size`: Max size of UDP packets to receive.
+    * `store_types`: A list of message `type` strings. Only messages with a type present in this list will be saved to the database. Example: `["msg", "ack", "status"]`.
 * **`logging`**:
-  * `console.level`: Log level for console output (e.g., `INFO`, `DEBUG`, `WARNING`).
-  * `file.path`: Path to the log file. Default: `logs/MeshComListener.log`.
-  * `file.level`: Log level for file output.
-  * `file.rolling_interval`: How often the log file should rotate (`day`, `hour`, `minute`, `midnight`).
-  * `file.retained_file_count_limit`: How many old log files to keep.
-  * `file.output_template`: Log message format string.
+    * `console.level`: Log level for console output (e.g., `INFO`, `DEBUG`, `WARNING`).
+    * `file.path`: Path to the log file. Default: `logs/MeshComListener.log`.
+    * `file.level`: Log level for file output.
+    * `file.rolling_interval`: How often the log file should rotate (`day`, `hour`, `minute`, `midnight`).
+    * `file.retained_file_count_limit`: How many old log files to keep.
+    * `file.output_template`: Log message format string for file logging.
 * **`forwarding`**:
-  * `enabled`: Set to `true` to enable forwarding, `false` to disable.
-  * `provider`: Currently only `"telegram"` is supported.
-  * `rules`: A list of dictionaries defining which messages to forward. A message is forwarded if it matches *any* rule.
-    * Each rule is a dictionary specifying conditions. Example: `{"type": "msg", "dst": "232"}` forwards messages of type `msg` sent to `232`. `{"type": "pos"}` forwards all messages of type `pos` regardless of destination. Supported keys in rules: `type`, `dst`.
-    * `telegram`:
-      * `bot_token`: Your Telegram Bot Token. **Recommended:** Set via `TELEGRAM_BOT_TOKEN` environment variable. Falls back to this value if env var is not set. Default placeholder: `"SET_VIA_ENV_OR_CONFIG"`.
-      * `chat_id`: The target Telegram Chat ID (user, group, or channel). **Recommended:** Set via `TELEGRAM_CHAT_ID` environment variable. Falls back to this value if env var is not set. Default placeholder: `"SET_VIA_ENV_OR_CONFIG"`.
+    * `enabled`: Set to `true` to enable forwarding, `false` to disable.
+    * `provider`: Currently only `"telegram"` is supported.
+    * `rules`: A list of dictionaries defining which messages to forward. A message is forwarded if it matches *any* rule.
+        * Each rule is a dictionary specifying conditions. Example: `{"type": "msg", "dst": "ADMIN"}` forwards messages of type `msg` sent to `ADMIN`. `{"type": "status"}` forwards all messages of type `status` regardless of destination. Supported keys in rules: `type`, `dst`.
+    * **`telegram`**: Contains settings specific to the Telegram forwarder.
+        * `bot_token`: Your Telegram Bot Token. **Recommended:** Set via `TELEGRAM_BOT_TOKEN` environment variable. Falls back to this value if env var is not set. Default placeholder: `"SET_VIA_ENV_OR_CONFIG"`.
+        * `chat_id`: The target Telegram Chat ID (user, group, or channel). **Recommended:** Set via `TELEGRAM_CHAT_ID` environment variable. Falls back to this value if env var is not set. Default placeholder: `"SET_VIA_ENV_OR_CONFIG"`.
+        * **`templates`**: A dictionary defining the message format for different message types sent to Telegram.
+            * **Keys:** Message type strings (e.g., `"msg"`, `"pos"`) and a mandatory `"default"` key used as a fallback for unknown types.
+            * **Values:** Template strings using Python's `{placeholder}` formatting syntax.
+            * **Telegram MarkdownV2:** The templates should be written using Telegram's [MarkdownV2 style](https://core.telegram.org/bots/api#markdownv2-style) for formatting (e.g., `*bold*`, `_italic_`, `` `code` ``, `[link text](URL)`).
+            * **Placeholders:** You can use placeholders corresponding to the keys in the received JSON message (e.g., `{type}`, `{src}`, `{dst}`, `{msg}`, `{lat}`, `{long}`, `{alt}`, `{msg_id}`).
+            * **Variable Escaping:** To prevent issues with Telegram's MarkdownV2 parsing, **values inserted into placeholders outside of code blocks (`` ` ``) or URLs are automatically escaped** by the application (e.g., a `*` in the `{src}` field will become `\*`). You **do not** need to escape values like `{src}` manually within the template string itself. However, **values inside code blocks** (like `{alt}` in the default `pos` template) are **not** escaped, preserving their original content.
+            * **Special/Computed Placeholders:** Some placeholders starting with an underscore (`_`) provide pre-formatted or calculated values:
+                * `{_alt_m}`: Altitude converted from feet (if present in `{alt}`) to meters, rounded to one decimal place (e.g., `156.0`). Used in the `pos` template.
+                * `{_map_link}`: A pre-formatted URL pointing to OpenStreetMap for the given `{lat}` and `{long}`. Used in the `pos` template. Should be used directly within Markdown link syntax like `[Show Map]({_map_link})`.
+                * `{_raw_json_short}`: A shortened (first 200 chars) version of the raw incoming JSON message. Useful for the `default` template to show unrecognized message structures.
+            * **Example Templates (Defaults):**
+                ```json
+                "templates": {
+                    "default": "📡 *Neue Nachricht*\n*Typ:* `{type}`\n*Von:* `{src}`\n*An:* `{dst}`\n*ID:* `{msg_id}`\n*Rohdaten:* `{_raw_json_short}`",
+                    "msg": "📡 *Neue Nachricht*\n*Typ:* `msg`\n*Von:* `{src}`\n*An:* `{dst}`\n*ID:* `{msg_id}`\n*Nachricht:*\n```\n{msg}\n```",
+                    "pos": "📡 *Position*\n*Von:* `{src}`\n*Position:* `{lat}, {long}`\n*Höhe:* `{_alt_m}m`\n[📍 Auf Karte anzeigen]({_map_link})"
+                }
+                ```
+            * **Customization:** You can modify these templates in your `config.json` to change the look and content of the forwarded Telegram messages. Ensure you use valid MarkdownV2 and correct placeholders. If a placeholder used in your template is missing in the received message data *and* not handled specifically by the code, it might be replaced with `'???'` or cause formatting errors.
 
 ## Usage
 
 ### Docker
 
-* **Start:** `docker-compose up -d` (in the directory with `docker-compose.yaml`)
-* **Stop & Remove:** `docker-compose down`
-* **View Logs:** `docker-compose logs -f` (or `docker logs -f meshcom-listener`)
-* **Restart:** `docker-compose restart`
+* **Start:** `docker compose up -d` (in the directory with `docker-compose.yaml`)
+* **Stop & Remove:** `docker compose down`
+* **View Logs:** `docker compose logs -f` (or `docker logs -f meshcom-listener`)
+* **Restart:** `docker compose restart`
 
 ### Local
 

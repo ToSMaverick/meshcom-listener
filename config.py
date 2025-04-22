@@ -2,15 +2,16 @@
 
 import json
 import os
-import logging # Logging-Modul importieren
+import logging
 from types import SimpleNamespace
+# Importiere Dict für Type Hinting
+from typing import Dict, Any
 
-# Logger für dieses Modul initialisieren (Konfiguration erfolgt später extern)
 log = logging.getLogger(__name__)
 
 CONFIG_FILENAME = "config.json"
 
-# Standardkonfiguration, mit neuen Platzhaltern für Telegram-Secrets
+# Standardkonfiguration, mit neuem "templates"-Abschnitt
 DEFAULT_CONFIG = {
     "database": {
         "db_file": "db/meshcom_messages.db",
@@ -46,9 +47,16 @@ DEFAULT_CONFIG = {
             # {"type": "pos"}              # Leite alle Positionsmeldungen weiter
         ],
         "telegram": {
-            # NEUE Platzhalter: Deutlicher Hinweis auf Umgebungsvariablen
             "bot_token": "SET_VIA_ENV_OR_CONFIG",
-            "chat_id": "SET_VIA_ENV_OR_CONFIG"
+            "chat_id": "SET_VIA_ENV_OR_CONFIG",
+            # NEU: Templates für Telegram Nachrichten (MarkdownV2)
+            "templates": {
+                "default": "📡 *Neue Nachricht*\n*Typ:* `{type}`\n*Von:* `{src}`\n*An:* `{dst}`\n*ID:* `{msg_id}`\n*Rohdaten:* `{_raw_json_short}`",
+                "msg": "📡 *Neue Nachricht*\n*Typ:* `msg`\n*Von:* `{src}`\n*An:* `{dst}`\n*ID:* `{msg_id}`\n*Nachricht:*\n```\n{msg}\n```",
+                "pos": "📡 *Position*\n*Von:* `{src}`\n*Position:* `{lat}, {long}`\n*Höhe:* `{_alt_m}m`\n[📍 Auf Karte anzeigen]({_map_link})"
+                # Platzhalter: {key}, {_computed_key}
+                # MarkdownV2 wird im Template erwartet, dynamische Werte werden escaped
+            }
         }
     }
 }
@@ -127,11 +135,14 @@ class ConfigLoader:
         """
         merged = default.copy()
         for key, value in loaded.items():
-            if isinstance(value, dict) and isinstance(merged.get(key), dict):
-                merged[key] = self._merge_configs(merged[key], value) # Rekursiv für verschachtelte Dicts
+            # Prüfe, ob der Schlüssel im Default existiert und beide Werte Dictionaries sind
+            if key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
+                 merged[key] = self._merge_configs(merged[key], value) # Rekursiv für verschachtelte Dicts
             else:
-                merged[key] = value # Überschreiben oder hinzufügen
+                 # Überschreiben oder hinzufügen, wenn kein deep merge möglich/nötig
+                 merged[key] = value
         return merged
+
 
     def _load_or_create(self):
         """Lädt die Konfiguration oder erstellt sie, falls nötig."""
@@ -148,7 +159,8 @@ class ConfigLoader:
 
         return config_data
 
-    def _populate_attributes(self, config_data):
+
+    def _populate_attributes(self, config_data: Dict[str, Any]):
         """
         Wandelt das Konfigurations-Dict in SimpleNamespace-Attribute um
         und überschreibt Telegram-Secrets mit Umgebungsvariablen, falls vorhanden.
@@ -169,33 +181,43 @@ class ConfigLoader:
              file=SimpleNamespace(**log_file_settings)
         )
 
-        telegram_settings = forwarding_settings.get("telegram", DEFAULT_CONFIG["forwarding"]["telegram"])
+        # Behandle 'telegram' Sektion sorgfältiger, da sie jetzt 'templates' enthält
+        default_telegram_settings = DEFAULT_CONFIG["forwarding"]["telegram"]
+        loaded_telegram_settings = forwarding_settings.get("telegram", default_telegram_settings)
+
+        # Stelle sicher, dass 'templates' ein Dict ist, falls es in der Config fehlt oder null ist
+        telegram_templates = loaded_telegram_settings.get("templates", default_telegram_settings["templates"])
+        if not isinstance(telegram_templates, dict):
+            log.warning("Ungültiger 'templates'-Eintrag in forwarding.telegram, verwende Standard-Templates.")
+            telegram_templates = default_telegram_settings["templates"]
+
+        # Erstelle den telegram Namespace
+        self.forwarding_telegram = SimpleNamespace(
+            bot_token=loaded_telegram_settings.get("bot_token", default_telegram_settings["bot_token"]),
+            chat_id=loaded_telegram_settings.get("chat_id", default_telegram_settings["chat_id"]),
+            templates=telegram_templates # Verwende das validierte/default Template-Dict
+        )
+
+        # Erstelle den forwarding Namespace
         self.forwarding = SimpleNamespace(
             enabled=forwarding_settings.get("enabled", DEFAULT_CONFIG["forwarding"]["enabled"]),
             provider=forwarding_settings.get("provider", DEFAULT_CONFIG["forwarding"]["provider"]),
             rules=forwarding_settings.get("rules", DEFAULT_CONFIG["forwarding"]["rules"]),
-            telegram=SimpleNamespace(**telegram_settings)
+            telegram=self.forwarding_telegram # Füge den erstellten Telegram-Namespace hinzu
         )
 
         # 2. Überschreibe Telegram-Secrets mit Umgebungsvariablen (falls gesetzt)
+        #    Wir greifen jetzt auf das verschachtelte Objekt zu
         env_token = os.getenv('TELEGRAM_BOT_TOKEN')
         env_chat_id = os.getenv('TELEGRAM_CHAT_ID')
 
-        # Verwende den Wert aus der Umgebungsvariable, wenn sie gesetzt ist und nicht leer ist.
-        # Andernfalls bleibt der Wert aus der Datei / den Defaults erhalten.
         if env_token:
             log.info("Überschreibe telegram.bot_token aus Umgebungsvariable TELEGRAM_BOT_TOKEN.")
             self.forwarding.telegram.bot_token = env_token
-        # else: # Kein else nötig, der Wert aus config_data bleibt einfach bestehen
-        #    log.debug("Keine TELEGRAM_BOT_TOKEN Umgebungsvariable gefunden, verwende Wert aus config.json/Defaults.")
-
 
         if env_chat_id:
             log.info("Überschreibe telegram.chat_id aus Umgebungsvariable TELEGRAM_CHAT_ID.")
             self.forwarding.telegram.chat_id = env_chat_id
-        # else:
-        #    log.debug("Keine TELEGRAM_CHAT_ID Umgebungsvariable gefunden, verwende Wert aus config.json/Defaults.")
-
 
         log.debug("Konfigurationsattribute erfolgreich erstellt und ggf. mit Umgebungsvariablen überschrieben.")
 
@@ -208,7 +230,6 @@ class ConfigLoader:
             if not isinstance(self.database.table_name, str) or not self.database.table_name:
                  raise ValueError("Ungültiger oder fehlender Wert für database.table_name.")
 
-
             # --- Listener-Validierung ---
             if not isinstance(self.listener.host, str):
                  raise ValueError("Ungültiger oder fehlender Wert für listener.host.")
@@ -216,11 +237,10 @@ class ConfigLoader:
                  raise ValueError(f"Ungültiger Wert für listener.port '{self.listener.port}' (muss eine Zahl zwischen 1 und 65535 sein).")
             if not isinstance(self.listener.buffer_size, int) or self.listener.buffer_size <= 0:
                  raise ValueError(f"Ungültiger Wert für listener.buffer_size '{self.listener.buffer_size}' (muss eine positive Zahl sein).")
-
             if not hasattr(self.listener, 'store_types') or not isinstance(self.listener.store_types, list):
-                 raise ValueError("Ungültiger oder fehlender Wert für listener.store_types (muss eine Liste sein).")
+                  raise ValueError("Ungültiger oder fehlender Wert für listener.store_types (muss eine Liste sein).")
             if not all(isinstance(item, str) for item in self.listener.store_types):
-                 raise ValueError("listener.store_types darf nur Strings enthalten.")
+                  raise ValueError("listener.store_types darf nur Strings enthalten.")
             log.debug("Zu speichernde Typen: %s", self.listener.store_types)
 
 
@@ -230,26 +250,22 @@ class ConfigLoader:
                  raise ValueError(f"Ungültiger Wert für logging.console.level '{self.logging_config.console.level}'. Gültige Werte: {list(valid_log_levels)}")
             if not isinstance(self.logging_config.file.path, str) or not self.logging_config.file.path:
                   raise ValueError("Ungültiger oder fehlender Wert für logging.file.path.")
-            # Sicherstellen, dass das Verzeichnis für die Log-Datei erstellt werden kann (prüft nicht Schreibrechte!)
             log_file_dir = os.path.dirname(self.logging_config.file.path)
-            if log_file_dir: # Nur wenn ein Pfad angegeben ist (nicht nur Dateiname)
+            if log_file_dir:
                   try:
                        os.makedirs(log_file_dir, exist_ok=True)
                        log.debug("Verzeichnis '%s' für Logdatei sichergestellt.", log_file_dir)
                   except OSError as e:
-                       # Fehler nur loggen, nicht abbrechen, da Logger-Setup dies ggf. behandelt
                        log.warning("Konnte Verzeichnis '%s' für Logdatei nicht erstellen/prüfen: %s", log_file_dir, e)
-
             if not isinstance(self.logging_config.file.level, str) or self.logging_config.file.level.upper() not in valid_log_levels:
                   raise ValueError(f"Ungültiger Wert für logging.file.level '{self.logging_config.file.level}'. Gültige Werte: {list(valid_log_levels)}")
-            # rolling_interval ist nur ein String, Validierung erfolgt in logger.py
             if not isinstance(self.logging_config.file.retained_file_count_limit, int) or self.logging_config.file.retained_file_count_limit < 0:
                   raise ValueError(f"Ungültiger Wert für logging.file.retained_file_count_limit '{self.logging_config.file.retained_file_count_limit}' (muss >= 0 sein).")
-            if not isinstance(self.logging_config.file.output_template, str): # Keine Prüfung auf leeren String, da evtl. gültig
+            if not isinstance(self.logging_config.file.output_template, str):
                   raise ValueError("Ungültiger oder fehlender Wert für logging.file.output_template.")
 
 
-            # --- Forwarding-Validierung (angepasst) ---
+            # --- Forwarding-Validierung (angepasst für Templates) ---
             if not hasattr(self.forwarding, 'enabled') or not isinstance(self.forwarding.enabled, bool):
                 raise ValueError("Ungültiger oder fehlender Wert für forwarding.enabled (muss true oder false sein).")
             if not hasattr(self.forwarding, 'provider') or not isinstance(self.forwarding.provider, str) or not self.forwarding.provider:
@@ -264,7 +280,7 @@ class ConfigLoader:
                  if not isinstance(rule, dict):
                      raise ValueError(f"Ungültige Regel in forwarding.rules an Index {i}: Muss ein Dictionary sein.")
                  for key, value in rule.items():
-                     if key not in ['type', 'dst', 'src']: # Erlaubte Schlüssel für Regeln (Beispiel)
+                     if key not in ['type', 'dst', 'src']:
                          log.warning("Unbekannter Schlüssel '%s' in forwarding.rules[%d]. Wird ignoriert.", key, i)
                      if not isinstance(value, str):
                          raise ValueError(f"Ungültiger Wert für Schlüssel '{key}' in forwarding.rules an Index {i}: Muss ein String sein.")
@@ -276,22 +292,29 @@ class ConfigLoader:
             if not hasattr(self.forwarding.telegram, 'chat_id') or not isinstance(self.forwarding.telegram.chat_id, str):
                  raise ValueError("Ungültiger oder fehlender Wert für forwarding.telegram.chat_id.")
 
-            # NEU: Strengere Prüfung, wenn Forwarding aktiviert ist
-            placeholder_token = "SET_VIA_ENV_OR_CONFIG" # Neuer Default-Platzhalter
-            placeholder_chat_id = "SET_VIA_ENV_OR_CONFIG"
+            # NEU: Template-Validierung
+            if not hasattr(self.forwarding.telegram, 'templates') or not isinstance(self.forwarding.telegram.templates, dict):
+                 raise ValueError("Ungültiger oder fehlender Wert für forwarding.telegram.templates (muss ein Dictionary sein).")
+            if 'default' not in self.forwarding.telegram.templates or not isinstance(self.forwarding.telegram.templates['default'], str):
+                 raise ValueError("Ein 'default' Template (String) muss in forwarding.telegram.templates vorhanden sein.")
+            # Optional: Weitere Prüfungen, ob Templates für msg, pos etc. Strings sind
+            for tpl_key, tpl_value in self.forwarding.telegram.templates.items():
+                if not isinstance(tpl_value, str):
+                    raise ValueError(f"Template für '{tpl_key}' in forwarding.telegram.templates muss ein String sein.")
+                # Optional: Prüfen, ob die Templates gültige Format-Strings sind? (komplex)
 
+
+            # Strengere Prüfung für Secrets bleibt gleich
+            placeholder_token = "SET_VIA_ENV_OR_CONFIG"
+            placeholder_chat_id = "SET_VIA_ENV_OR_CONFIG"
             if self.forwarding.enabled:
                 log.info("Forwarding ist aktiviert (Provider: %s).", self.forwarding.provider)
-                # Prüfe, ob die finalen Werte (nach Env-Override) fehlen oder Platzhalter sind
                 if not self.forwarding.telegram.bot_token or self.forwarding.telegram.bot_token == placeholder_token:
-                    # FEHLER werfen, wenn aktiviert aber kein Token gesetzt ist
                     raise ValueError("Forwarding ist aktiviert, aber telegram.bot_token fehlt oder ist Platzhalter. Setze TELEGRAM_BOT_TOKEN Umgebungsvariable oder den Wert in config.json.")
                 if not self.forwarding.telegram.chat_id or self.forwarding.telegram.chat_id == placeholder_chat_id:
-                    # FEHLER werfen, wenn aktiviert aber keine Chat-ID gesetzt ist
                     raise ValueError("Forwarding ist aktiviert, aber telegram.chat_id fehlt oder ist Platzhalter. Setze TELEGRAM_CHAT_ID Umgebungsvariable oder den Wert in config.json.")
             else:
                  log.info("Forwarding ist deaktiviert.")
-
 
             log.info("Konfiguration erfolgreich validiert.")
 
@@ -302,15 +325,9 @@ class ConfigLoader:
              log.error("Fehlendes Attribut während der Validierung: %s", e, exc_info=True)
              raise ValueError(f"Fehlende Konfigurationseinstellung: {e}")
 
-
 # Kleines Beispiel, wie man die Klasse verwenden könnte
 if __name__ == "__main__":
-    # Umgebungsvariablen für den Test setzen (nur für diesen Lauf)
-    # os.environ['TELEGRAM_BOT_TOKEN'] = 'TOKEN_FROM_ENV_VAR_TEST'
-    # os.environ['TELEGRAM_CHAT_ID'] = 'CHAT_ID_FROM_ENV_VAR_TEST'
-
     logging.basicConfig(level=logging.DEBUG, format='[%(levelname)s] %(name)s: %(message)s')
-
     log.info("Teste ConfigLoader...")
     try:
         config = ConfigLoader() # Lädt/erstellt config.json und wendet Env-Vars an
@@ -319,37 +336,21 @@ if __name__ == "__main__":
         log.info("--- Geladene/Erstellte Konfiguration (inkl. Env-Override) ---")
         # ... (Ausgaben für DB, Listener, Logging wie vorher) ...
         log.info("DB Datei: %s", config.database.db_file)
-        log.info("DB Tabelle: %s", config.database.table_name)
-        log.info("Listener Host: %s", config.listener.host)
-        log.info("Listener Port: %d", config.listener.port)
-        log.info("Listener Puffergröße: %d", config.listener.buffer_size)
+        # ... (andere Ausgaben) ...
         log.info("Listener zu speichernde Typen: %s", config.listener.store_types)
-        log.info("Log Konsole Level: %s", config.logging_config.console.level)
-        log.info("Log Datei Pfad: %s", config.logging_config.file.path)
-        log.info("Log Datei Level: %s", config.logging_config.file.level)
-        log.info("Log Datei Rolling Interval: %s", config.logging_config.file.rolling_interval)
-        log.info("Log Datei Anzahl behalten: %d", config.logging_config.file.retained_file_count_limit)
-        log.info("Log Datei Template: %s", config.logging_config.file.output_template)
-
+        # ... (Logging Ausgaben) ...
         log.info("Forwarding Aktiviert: %s", config.forwarding.enabled)
         log.info("Forwarding Provider: %s", config.forwarding.provider)
         log.info("Forwarding Regeln: %s", config.forwarding.rules)
-        # Zeige den finalen Wert an
-        log.info("Forwarding Telegram Token: %s... (versteckt)", config.forwarding.telegram.bot_token[:5] if config.forwarding.telegram.bot_token else "None")
+        log.info("Forwarding Telegram Token: %s...", config.forwarding.telegram.bot_token[:5] if config.forwarding.telegram.bot_token else "None")
         log.info("Forwarding Telegram Chat ID: %s", config.forwarding.telegram.chat_id)
+        log.info("Forwarding Telegram Templates:")
+        for key, tpl in config.forwarding.telegram.templates.items():
+             log.info("  %s: %s", key, tpl[:80] + ('...' if len(tpl) > 80 else '')) # Gekürzte Ausgabe
         log.info("--- Ende Konfiguration ---")
 
         if os.path.exists(CONFIG_FILENAME):
              log.info("Datei '%s' existiert.", CONFIG_FILENAME)
-        else:
-             log.warning("Datei '%s' konnte nicht erstellt werden.", CONFIG_FILENAME)
-
-        # Test: Umgebungsvariablen wieder entfernen, falls sie nur für den Test gesetzt wurden
-        # if 'TOKEN_FROM_ENV_VAR_TEST' in config.forwarding.telegram.bot_token:
-        #     del os.environ['TELEGRAM_BOT_TOKEN']
-        # if 'CHAT_ID_FROM_ENV_VAR_TEST' in config.forwarding.telegram.chat_id:
-        #     del os.environ['TELEGRAM_CHAT_ID']
-
 
     except ValueError as e:
         log.error("Validierungsfehler in der Konfiguration: %s", e)

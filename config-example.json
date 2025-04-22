@@ -32,7 +32,12 @@
         ],
         "telegram": {
             "bot_token": "SET_VIA_ENV_OR_CONFIG",
-            "chat_id": "SET_VIA_ENV_OR_CONFIG"
+            "chat_id": "SET_VIA_ENV_OR_CONFIG",
+            "templates": {
+                "default": "📡 *Neue Nachricht*\n*Typ:* `{type}`\n*Von:* `{src}`\n*An:* `{dst}`\n*ID:* `{msg_id}`\n*Rohdaten:* `{_raw_json_short}`",
+                "msg": "*Von:* `{src}`\n*An:* `{dst}`\n\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\\-\n{msg}",
+                "pos": "📡 *Position*\n*Von:* `{src}`\n*Position:* `{lat}, {long}`\n*Höhe:* `{_alt_m}m`\n[📍 Auf Karte anzeigen]({_map_link})"
+            }
         }
     }
 }

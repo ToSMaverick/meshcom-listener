@@ -10,45 +10,49 @@ A high-performance, 12-factor compliant UDP listener for MeshCom nodes, utilizin
 
 ### 2. Config (III)
 - **Tool:** `environs`.
-- All configuration is stored in environment variables. No hardcoded secrets or environment-specific config files in the container.
-- `config.json` will be deprecated in favor of `.env` or Docker environment variables.
+- All configuration is stored in environment variables.
+- `config.json` is deprecated. Overrides via `.env` or environment.
 
 ### 3. Backing Services (IV)
-- **Database:** SurrealDB (accessed via WebSockets/RPC).
-- **Notifications:** Apprise API (accessed via HTTP).
-- Services are attached via URLs and credentials defined in the environment.
+- **Database:** SurrealDB (Async WebSocket/RPC).
+- **Notifications:** Apprise API (HTTP/POST).
+- **Auto-Init:** The application checks and initializes the SurrealDB schema on startup (`serve`).
 
-### 4. Concurrency (VIII) & Processes (VI)
-- **Core:** Python `asyncio`.
-- **CLI:** `typer`.
-- The application runs as a stateless, asynchronous process handling concurrent UDP packets and upstream API calls.
-
-### 5. Logs (XI)
-- Logs are treated as event streams sent to `stdout`/`stderr`. No local file rotation within the container (delegated to Docker/Systemd).
+### 4. CLI Interface (Typer)
+- `meshcom-listener serve`: Starts the async UDP listener (main entry point).
+- `meshcom-listener test config`: Displays current configuration (masked secrets).
+- `meshcom-listener test db`: Validates SurrealDB connection and schema.
+- `meshcom-listener test notify`: Validates Apprise connection and sends a test notification.
+- `meshcom-listener db init`: Manually triggers schema initialization (also runs automatically on `serve`).
+- `meshcom-listener version`: Shows application version and service status.
 
 ## 🛠 Tech Stack
 - **Language:** Python 3.13+ (Asyncio)
+- **Dependency Management:** `uv` (using `pyproject.toml` and `uv.lock`)
 - **CLI Framework:** `typer`
 - **Env Management:** `environs`
 - **Database:** `surrealdb` (Python Async SDK)
 - **HTTP Client:** `httpx` (for Apprise API)
 - **Deployment:** Docker Multi-stage (uv-based)
+- **CI/CD:** GitHub Actions -> GitHub Container Registry (GHCR)
 
 ## 📋 Implementation Plan
 
-### Phase 1: Environment & CLI
-- [ ] Implement `config.py` using `environs`.
-- [ ] Refactor `main.py` with `typer`.
+### Phase 1: Modern Tooling & Config (12-Factor Foundation)
+- [ ] Initialize `uv` project and create `pyproject.toml`.
+- [ ] Implement `config.py` using `environs` (Mapping env vars to a clean object).
+- [ ] Create `main.py` with `typer` structure and command stubs.
+- [ ] Cleanup: Remove old `requirements.txt` and `if __name__ == "__main__":` blocks.
 
-### Phase 2: Async Core
-- [ ] Convert `listener.py` to `asyncio` (DatagramProtocol).
-- [ ] Implement `database.py` with SurrealDB Async SDK.
-- [ ] Implement `forwarder.py` using `httpx` for Apprise API.
+### Phase 2: Async Core & Backing Services
+- [ ] Implement `database.py`: Async SurrealDB client with auto-init logic.
+- [ ] Implement `forwarder.py`: Async Apprise client using `httpx`.
+- [ ] Refactor `listener.py`: Convert to `asyncio.DatagramProtocol`.
 
-### Phase 3: Infrastructure
-- [ ] Create `docker-compose.yaml` with SurrealDB, Apprise, and Listener.
-- [ ] Implement a "Schema-on-Startup" logic to apply SurrealQL.
+### Phase 3: Infrastructure & Deployment
+- [ ] Create `docker-compose.yaml` (SurrealDB + Apprise + Listener).
+- [ ] Optimize `Dockerfile` (Multi-stage with `uv` for minimal image size).
 
-### Phase 4: Refinement
-- [ ] Add graceful shutdown (SIGTERM handling).
-- [ ] Multi-stage Dockerfile optimization.
+### Phase 4: CI/CD & Release
+- [ ] Create GitHub Action for automated build and push to GHCR.
+- [ ] Add `README.md` instructions for the new "one-click" deployment.

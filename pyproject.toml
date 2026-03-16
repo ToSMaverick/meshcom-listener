@@ -1,0 +1,18 @@
+[project]
+name = "meshcom-listener"
+version = "0.2.0"
+description = "High-performance UDP listener for MeshCom nodes with SurrealDB and Apprise"
+readme = "readme.md"
+requires-python = ">=3.13"
+dependencies = [
+    "typer>=0.15.1",
+    "environs>=14.1.1",
+    "surrealdb>=0.3.3",
+    "httpx>=0.28.1",
+]
+
+[project.scripts]
+meshcom = "main:app"
+
+[tool.uv]
+managed = true

@@ -24,6 +24,7 @@ A high-performance, 12-factor compliant UDP listener for MeshCom nodes, utilizin
 - `meshcom-listener test db`: Validates SurrealDB connection and schema.
 - `meshcom-listener test notify`: Validates Apprise connection and sends a test notification.
 - `meshcom-listener db init`: Manually triggers schema initialization (also runs automatically on `serve`).
+- `meshcom-listener db reset`: Wipe all data and re-initialize the schema.
 - `meshcom-listener version`: Shows application version and service status.
 
 ## 🛠 Tech Stack
@@ -39,20 +40,23 @@ A high-performance, 12-factor compliant UDP listener for MeshCom nodes, utilizin
 ## 📋 Implementation Plan
 
 ### Phase 1: Modern Tooling & Config (12-Factor Foundation)
-- [ ] Initialize `uv` project and create `pyproject.toml`.
-- [ ] Implement `config.py` using `environs` (Mapping env vars to a clean object).
-- [ ] Create `main.py` with `typer` structure and command stubs.
-- [ ] Cleanup: Remove old `requirements.txt` and `if __name__ == "__main__":` blocks.
+- [x] Initialize `uv` project and create `pyproject.toml`.
+- [x] Implement `config.py` using `environs` (Mapping env vars to a clean object).
+- [x] Create `main.py` with `typer` structure and command stubs.
+- [x] Cleanup: Remove old `requirements.txt` and `if __name__ == "__main__":` blocks.
 
 ### Phase 2: Async Core & Backing Services
-- [ ] Implement `database.py`: Async SurrealDB client with auto-init logic.
-- [ ] Implement `forwarder.py`: Async Apprise client using `httpx`.
-- [ ] Refactor `listener.py`: Convert to `asyncio.DatagramProtocol`.
+- [x] Implement `database.py`: Async SurrealDB client with auto-init logic.
+- [x] Implement `forwarder.py`: Async Apprise client using `httpx`.
+- [x] Refactor `listener.py`: Convert to `asyncio.DatagramProtocol`.
 
 ### Phase 3: Infrastructure & Deployment
-- [ ] Create `docker-compose.yaml` (SurrealDB + Apprise + Listener).
-- [ ] Optimize `Dockerfile` (Multi-stage with `uv` for minimal image size).
+- [x] Create `docker-compose.yaml` (SurrealDB + Apprise + Listener).
+- [x] Optimize `Dockerfile` (Multi-stage with `uv` for minimal image size).
 
 ### Phase 4: CI/CD & Release
-- [ ] Create GitHub Action for automated build and push to GHCR.
-- [ ] Add `README.md` instructions for the new "one-click" deployment.
+- [x] Create GitHub Action for automated build and push to GHCR.
+- [x] Add `README.md` instructions for the new "one-click" deployment.
+
+---
+**Status:** ✅ Project successfully modernized and ready for deployment.

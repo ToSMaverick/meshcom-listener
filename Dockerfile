@@ -1,5 +1,5 @@
 # Stage 1: Build stage
-FROM ghcr.io/astral-sh/uv:python3.13-slim AS builder
+FROM ghcr.io/astral-sh/uv:python3.14-trixie AS builder
 ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy
 WORKDIR /app
 
@@ -10,7 +10,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-install-project --no-dev
 
 # Stage 2: Final stage (Das reine Runtime-Image)
-FROM python:3.13-slim-bookworm
+FROM python:3.14-slim-trixie
 WORKDIR /app
 
 # Copy the installed packages from the builder

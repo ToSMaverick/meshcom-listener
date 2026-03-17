@@ -13,7 +13,7 @@ A high-performance, asynchronous Python application designed to listen for UDP p
 
 ## 🛠 Tech Stack
 
-*   **Language:** Python 3.13+
+*   **Language:** Python 3.14+
 *   **Database:** [SurrealDB](https://surrealdb.com/) (Graph/Document hybrid)
 *   **Notification Gateway:** [Apprise API](https://github.com/caronc/apprise-api)
 *   **Dependency Management:** `uv`
@@ -62,4 +62,4 @@ The database uses a hybrid schema in the `message` table:
 *   `raw`: The complete original JSON packet for future-proof analysis.
 
 ---
-73 de MeshCom Listener Team
+73 de OE3MIF

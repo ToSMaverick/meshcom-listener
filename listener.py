@@ -35,6 +35,7 @@ class MeshComProtocol(asyncio.DatagramProtocol):
         src = message_dict.get("src")
         
         log.info(f"Received {msg_type} from {src} ({addr})")
+        log.debug(f"Full message content: {json.dumps(message_dict)}")
 
         # 1. Save to Database (if type is in STORE_TYPES)
         if msg_type in config.STORE_TYPES or "*" in config.STORE_TYPES:

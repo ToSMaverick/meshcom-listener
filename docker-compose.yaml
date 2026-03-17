@@ -1,31 +1,33 @@
-# docker-compose.yaml (angepasst)
 version: "3.9"
 services:
-  meshcom-listener:
-    build: . # Sagt Docker Compose, das Image aus dem Dockerfile im aktuellen Verzeichnis zu bauen
-    # Oder, wenn du manuell baust:
-    # image: mein-meshcom-listener:latest
+  # --- MeshCom Listener (The Bridge) ---
+  listener:
+    build: .
     container_name: meshcom-listener
-    working_dir: /app # Bleibt sinnvoll, obwohl im Dockerfile gesetzt
-    volumes:
-      # Mount nur die Konfigurationsdatei (read-only empfohlen)
-      - ./config.json:/app/config.json:ro
-      # Mount das Verzeichnis für die SQLite-DB
-      - ./db:/app/db
-      # Mount das Verzeichnis für die Log-Dateien
-      - ./logs:/app/logs
-    ports:
-      - "1799:1799/udp" # Host-Port 1799 auf Container-Port 1799 für UDP mappen
-    #networks: # Hier kannst du Netzwerke definieren, wenn nötig
-    #  - default
     restart: unless-stopped
-    environment:
-      # PYTHONUNBUFFERED ist jetzt im Dockerfile, kann hier aber bleiben oder entfernt werden.
-      # NEU: Hier sensible Daten wie den Bot-Token   bergeben!
-      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN} # Liest aus .env-Datei oder Umgebung
-      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
-      # Weitere Umgebungsvariablen bei Bedarf
-#networks:
-#  default:
-#    name: your_network_name # Ersetze durch deinen Netzwerk-Namen
-#    external: true
+    ports:
+      - "1799:1799/udp"
+    env_file: .env
+    depends_on:
+      - surrealdb
+      - apprise
+
+  # --- SurrealDB (The Smart Database) ---
+  surrealdb:
+    image: surrealdb/surrealdb:latest
+    container_name: meshcom-db
+    command: start --user root --pass root --log info rocksdb:/mydata/meshcom.db
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./db:/mydata
+    restart: unless-stopped
+
+  # --- Apprise API (The Notification Hub) ---
+  apprise:
+    image: caronc/apprise
+    container_name: meshcom-apprise
+    restart: unless-stopped
+    # Internal communication on port 8000 (default)
+    # ports:
+    #   - "8001:8000" # Optional: Expose externally if needed

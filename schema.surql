@@ -1,25 +1,30 @@
--- Schema für MeshCom Listener
+-- Schema für MeshCom Listener (v0.2.9)
+-- Sicherer Modus: Keine REMOVE TABLE Befehle für den Produktivbetrieb.
 
--- Tabelle für alle eingegangenen Nachrichten
-DEFINE TABLE message SCHEMAFULL;
-DEFINE FIELD type ON message TYPE string ASSERT $value IN ['msg', 'pos', 'ack', 'status'];
-DEFINE FIELD src ON message TYPE string;
-DEFINE FIELD dst ON message TYPE string;
-DEFINE FIELD msg ON message TYPE string;
-DEFINE FIELD lat ON message TYPE number;
-DEFINE FIELD long ON message TYPE number;
-DEFINE FIELD alt ON message TYPE number;
+-- Tabelle message definieren
+DEFINE TABLE message SCHEMALESS;
 DEFINE FIELD time ON message TYPE datetime VALUE $before OR time::now();
-DEFINE FIELD raw ON message TYPE object;
+DEFINE FIELD src ON message TYPE string;
+-- 'via' speichert den Pfad (die restlichen Knoten) als Liste von Strings
+DEFINE FIELD via ON message TYPE array<string> DEFAULT [];
+DEFINE FIELD msg_type ON message TYPE string;
 
--- Tabelle für Funkknoten (Zustandsbehaftet)
-DEFINE TABLE node SCHEMAFULL;
-DEFINE FIELD last_seen ON node TYPE datetime VALUE time::now();
-DEFINE FIELD last_pos ON node TYPE object;
+DEFINE INDEX IF NOT EXISTS src_idx ON TABLE message FIELDS src;
+DEFINE INDEX IF NOT EXISTS time_idx ON TABLE message FIELDS time;
+-- Index für die Suche in der via-Liste (z.B. Wer hat geroutet?)
+DEFINE INDEX IF NOT EXISTS via_idx ON TABLE message FIELDS via;
 
--- Automatisches Update der Knoten-Tabelle bei neuen Nachrichten
+-- Tabelle node definieren (SCHEMALESS für flexiblen Status)
+DEFINE TABLE node SCHEMALESS;
+DEFINE FIELD last_seen ON node TYPE datetime VALUE $before OR time::now();
+
+-- Event-Logik (Sicherstellung, dass nur der Absender genutzt wird)
 DEFINE EVENT update_node ON TABLE message WHEN $event = "CREATE" THEN (
-    UPSERT type::thing("node", $after.src) SET 
+    UPSERT type::record("node", $after.src) SET 
         last_seen = time::now(),
-        last_pos = IF $after.type = "pos" THEN { lat: $after.lat, long: $after.long, alt: $after.alt } ELSE last_pos END
+        last_pos = IF $after.msg_type = "pos" THEN { 
+            lat: $after.raw.lat, 
+            long: $after.raw.long, 
+            alt: $after.raw.alt 
+        } ELSE last_pos END
 );

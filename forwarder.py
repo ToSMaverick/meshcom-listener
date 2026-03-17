@@ -33,13 +33,17 @@ class AppriseForwarder:
             "format": "markdown",
             "type": "info"
         }
+        log.debug(f"Sending payload to Apprise API: {json.dumps(payload)}")
 
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 response = await client.post(self.api_url, json=payload)
                 response.raise_for_status()
                 log.info(f"Notification successfully sent to {len(self.targets)} targets.")
+                return True
         except httpx.HTTPStatusError as e:
             log.error(f"Apprise API returned error: {e.response.status_code} - {e.response.text}")
+            return False
         except Exception as e:
             log.error(f"Error sending notification to Apprise: {e}")
+            return False

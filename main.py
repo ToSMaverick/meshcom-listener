@@ -105,13 +105,17 @@ def test_notify():
     async def _test():
         try:
             typer.echo(f"Sending test notification via {config.APPRISE_URL}...")
-            await forwarder.send_notification({
+            success = await forwarder.send_notification({
                 "type": "status",
                 "src": "TEST-NODE",
                 "dst": "ADMIN",
                 "msg": "Connection Test: MeshCom Listener Notify works! ✅"
             })
-            typer.echo("✅ Apprise API call completed. Check your notification targets.")
+            if success:
+                typer.echo("✅ Apprise API call completed. Check your notification targets.")
+            else:
+                typer.echo("❌ Apprise API call failed. Check logs for details.")
+                raise typer.Exit(code=1)
         except Exception as e:
             typer.echo(f"❌ Apprise test failed: {e}")
             raise typer.Exit(code=1)
@@ -120,14 +124,30 @@ def test_notify():
 
 @db_app.command("init")
 def db_init():
-    """Manually trigger SurrealDB schema initialization."""
+    """Apply SurrealDB schema (non-destructive)."""
     async def _init():
         await db_handler.connect()
         await db_handler.init_schema()
         await db_handler.close()
-        typer.echo("✅ Database schema applied.")
+        typer.echo("✅ Database schema updated/applied.")
         
     asyncio.run(_init())
+
+@db_app.command("reset")
+def db_reset():
+    """REMOVES all data and tables (Destructive!)."""
+    confirm = typer.confirm("Are you sure you want to DELETE all MeshCom data and nodes?")
+    if not confirm:
+        raise typer.Abort()
+        
+    async def _reset():
+        await db_handler.connect()
+        await db_handler.db.query("REMOVE TABLE message; REMOVE TABLE node;")
+        await db_handler.init_schema()
+        await db_handler.close()
+        typer.echo("💥 Database wiped and re-initialized.")
+        
+    asyncio.run(_reset())
 
 @app.command()
 def version():

@@ -1,25 +1,32 @@
-# Dockerfile
-
-# 1. Basisimage wählen (spezifische Version, slim ist kleiner)
-FROM python:3.13-slim
-
-# 2. Arbeitsverzeichnis im Container setzen
+# Stage 1: Build stage
+FROM ghcr.io/astral-sh/uv:python3.13-slim AS builder
+ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy
 WORKDIR /app
 
-# 3. Umgebungsvariable für unbuffered Python-Output (gut für Logs)
-ENV PYTHONUNBUFFERED=1
+# Install dependencies (cached)
+RUN --mount=type=cache,target=/root/.cache/uv \
+    --mount=type=bind,source=uv.lock,target=uv.lock \
+    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
+    uv sync --frozen --no-install-project --no-dev
 
-# 4. Abhängigkeiten installieren (wird beim Image-Bau ausgeführt)
-# Nur requirements.txt kopieren, um den Build-Cache zu nutzen
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Stage 2: Final stage (Das reine Runtime-Image)
+FROM python:3.13-slim-bookworm
+WORKDIR /app
 
-# 5. Restlichen Anwendungscode in das Image kopieren
+# Copy the installed packages from the builder
+COPY --from=builder /app/.venv /app/.venv
+ENV PATH="/app/.venv/bin:$PATH"
+
+# Copy the application code
 COPY . .
 
-# 6. (Optional) Sicherstellen, dass das logs/ und db/ Verzeichnis existiert
-#    Dies ist nützlich, wenn Volumes später von Docker erstellt werden sollen
-RUN mkdir -p /app/logs /app/db
+# Security: Run as non-root user
+RUN useradd -m appuser && chown -R appuser /app
+USER appuser
 
-# 7. Standardbefehl zum Starten der Anwendung
-CMD ["python", "main.py"]
+# UDP Port for MeshCom
+EXPOSE 1799/udp
+
+# Standard-Kommando
+ENTRYPOINT ["python", "main.py"]
+CMD ["serve"]

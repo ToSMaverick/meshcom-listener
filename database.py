@@ -66,6 +66,21 @@ class SurrealHandler:
         except Exception as e:
             log.error(f"Error saving message to SurrealDB: {e}")
 
+    async def prune_old_messages(self, days: int):
+        """Delete messages older than X days."""
+        if not self.db:
+            return
+        
+        log.info(f"Housekeeping: Pruning messages older than {days} days...")
+        try:
+            # SurrealQL query to delete old records
+            query = f"DELETE message WHERE time < time::now() - {days}d"
+            result = await self.db.query(query)
+            log.debug(f"Pruning result: {result}")
+            log.info("Housekeeping: Old messages successfully removed.")
+        except Exception as e:
+            log.error(f"Housekeeping failed: {e}")
+
     async def close(self):
         """Close connection."""
         if self.db:

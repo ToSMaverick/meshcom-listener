@@ -42,6 +42,18 @@ async def shutdown(loop, signal=None):
     await asyncio.gather(*tasks, return_exceptions=True)
     loop.stop()
 
+async def housekeeping_task():
+    """Periodic task to prune old database records."""
+    log.info(f"Housekeeping task started (Retention: {config.DB_RETENTION_DAYS} days).")
+    while True:
+        try:
+            await db_handler.prune_old_messages(config.DB_RETENTION_DAYS)
+        except Exception as e:
+            log.error(f"Error in housekeeping loop: {e}")
+        
+        # Wait 4 hours before next run
+        await asyncio.sleep(4 * 3600)
+
 @app.command()
 def serve():
     """Start the async UDP listener."""
@@ -54,7 +66,10 @@ def serve():
         await db_handler.connect()
         await db_handler.init_schema()
         
-        # 2. Start UDP Listener
+        # 2. Start Housekeeping Task
+        asyncio.create_task(housekeeping_task())
+        
+        # 3. Start UDP Listener
         log.info(f"Listening for UDP packets on {config.LISTENER_HOST}:{config.LISTENER_PORT}")
         transport, protocol = await loop.create_datagram_endpoint(
             lambda: MeshComProtocol(db_handler, forwarder),

@@ -55,7 +55,35 @@ class MeshComProtocol(asyncio.DatagramProtocol):
         if msg_type in config.STORE_TYPES or "*" in config.STORE_TYPES:
             await self.db.save_message(db_data)
 
-        # 2. Forward to Notifications (only if enabled and type is 'msg')
-        # Filter logic will be added in the next step (5.2)
-        if config.NOTIFY_ENABLED and msg_type == "msg":
-             await self.forwarder.send_notification(message_dict)
+        # 2. Forward to Notifications (with complex filtering)
+        if config.NOTIFY_ENABLED:
+            should_forward = False
+            
+            # Filter by Type
+            if msg_type in config.FORWARD_TYPES or "*" in config.FORWARD_TYPES:
+                should_forward = True
+                
+                # Special filters for 'msg' types
+                if msg_type == "msg":
+                    dst = message_dict.get("dst")
+                    
+                    # 1. Check Source Exclusion (e.g., time-sync nodes)
+                    if sender in config.FORWARD_EXCLUDE_SRC:
+                        should_forward = False
+                        log.debug(f"Notification suppressed: {sender} is in EXCLUDE_SRC.")
+                    
+                    # 2. Check Destination Inclusion (if list is not empty, must be in it)
+                    if should_forward and config.FORWARD_INCLUDE_DST:
+                        if dst not in config.FORWARD_INCLUDE_DST:
+                            should_forward = False
+                            log.debug(f"Notification suppressed: {dst} not in INCLUDE_DST.")
+                    
+                    # 3. Check Destination Exclusion (e.g., broadcasts '*')
+                    if should_forward and dst in config.FORWARD_EXCLUDE_DST:
+                        should_forward = False
+                        log.debug(f"Notification suppressed: Destination {dst} is in EXCLUDE_DST.")
+
+            if should_forward:
+                await self.forwarder.send_notification(message_dict)
+            else:
+                log.debug(f"Notification skipped for {msg_type} from {sender} based on filters.")

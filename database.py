@@ -44,35 +44,15 @@ class SurrealHandler:
             await self.db.query(surql)
         log.info("Schema successfully applied.")
 
-    async def save_message(self, message_dict: dict):
-        """Save a message to SurrealDB using a hybrid schema."""
+    async def save_message(self, db_data: dict):
+        """Save pre-structured message data to SurrealDB."""
         if not self.db:
             log.error("Database not connected. Cannot save message.")
             return
 
         try:
-            # Parse 'src' to separate sender from routing path (via)
-            raw_src = message_dict.get("src", "")
-            src_parts = [s.strip() for s in raw_src.split(",") if s.strip()]
-            
-            sender = src_parts[0] if src_parts else None
-            via_path = src_parts[1:] if len(src_parts) > 1 else []
-
-            # Preparing the hybrid structure: Fixed metadata + Raw payload
-            data = {
-                "src": sender,
-                "via": via_path,
-                "src_type": message_dict.get("src_type"),
-                "msg_type": message_dict.get("type"),
-                "raw": message_dict  # The full original JSON
-            }
-            
-            # Ensure sender and msg_type are present (required by schema)
-            if not data["src"] or not data["msg_type"]:
-                log.warning(f"Message missing required fields 'src' or 'type': {message_dict}")
-                return
-
-            result = await self.db.create("message", data)
+            # Table is now 'message' again
+            result = await self.db.create("message", db_data)
             
             # Robust logging of the ID
             record_id = "???"
@@ -82,7 +62,7 @@ class SurrealHandler:
             elif isinstance(result, dict):
                 record_id = result.get("id", "???")
             
-            log.debug(f"Saved {data['msg_type']} from {data['src']} (via: {data['via']}) to SurrealDB. ID: {record_id}")
+            log.debug(f"Saved {db_data['msg_type']} from {db_data['src']} to SurrealDB. ID: {record_id}")
         except Exception as e:
             log.error(f"Error saving message to SurrealDB: {e}")
 

@@ -32,16 +32,30 @@ class MeshComProtocol(asyncio.DatagramProtocol):
     async def _process_message(self, message_dict, addr):
         """Handle storing and forwarding of a message."""
         msg_type = message_dict.get("type")
-        src = message_dict.get("src")
         
-        log.info(f"Received {msg_type} from {src} ({addr})")
+        # Parse 'src' to separate sender from routing path (via)
+        raw_src = message_dict.get("src", "")
+        src_parts = [s.strip() for s in raw_src.split(",") if s.strip()]
+        sender = src_parts[0] if src_parts else "unknown"
+        via_path = src_parts[1:] if len(src_parts) > 1 else []
+        
+        log.info(f"Received {msg_type} from {sender} ({addr})")
         log.debug(f"Full message content: {json.dumps(message_dict)}")
+
+        # Prepare structured data for DB
+        db_data = {
+            "src": sender,
+            "via": via_path,
+            "src_type": message_dict.get("src_type"),
+            "msg_type": msg_type,
+            "raw": message_dict
+        }
 
         # 1. Save to Database (if type is in STORE_TYPES)
         if msg_type in config.STORE_TYPES or "*" in config.STORE_TYPES:
-            await self.db.save_message(message_dict)
+            await self.db.save_message(db_data)
 
         # 2. Forward to Notifications (only if enabled and type is 'msg')
-        # Here you can implement more complex rules if needed
+        # Filter logic will be added in the next step (5.2)
         if config.NOTIFY_ENABLED and msg_type == "msg":
              await self.forwarder.send_notification(message_dict)

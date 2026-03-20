@@ -146,6 +146,7 @@ def db_reset():
         await db_handler.init_schema()
         await db_handler.close()
         typer.echo("💥 Database wiped and re-initialized.")
+
         
     asyncio.run(_reset())
 

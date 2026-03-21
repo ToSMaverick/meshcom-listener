@@ -21,20 +21,47 @@ A high-performance, asynchronous Python application designed to listen for UDP p
 
 ## 📦 Quick Start (Docker Compose)
 
-The easiest way to run the listener is using Docker Compose.
+The easiest way to run the listener is using the pre-built image from GHCR.
 
-1.  **Prepare Configuration:**
-    Create a `.env` file from the example:
-    ```bash
-    cp .env.example .env
+1.  **Create a `docker-compose.yaml`:**
+    ```yaml
+    version: "3.9"
+    services:
+      listener:
+        image: ghcr.io/tosmaverick/meshcom-listener:latest
+        container_name: meshcom-listener
+        restart: unless-stopped
+        ports:
+          - "1799:1799/udp"
+        environment:
+          - DB_URL=ws://surrealdb:8000
+          - APPRISE_URL=http://apprise:8000/notify
+          # - NOTIFY_ENABLED=true
+          # - NOTIFY_TARGETS=tgram://bottoken/chatid
+        depends_on:
+          - surrealdb
+          - apprise
+
+      surrealdb:
+        image: surrealdb/surrealdb:latest
+        container_name: meshcom-db
+        command: start --user root --pass root --log info file:/mydata/meshcom.db
+        ports:
+          - "8000:8000"
+        volumes:
+          - ./db:/mydata
+        restart: unless-stopped
+
+      apprise:
+        image: caronc/apprise
+        container_name: meshcom-apprise
+        restart: unless-stopped
     ```
-    Edit `.env` to set your listener port, SurrealDB credentials, and Apprise targets.
 
 2.  **Start the Stack:**
     ```bash
     docker-compose up -d
     ```
-    This starts the Listener, SurrealDB, and the Apprise API.
 
 3.  **Explore your Data:**
     Open `http://localhost:8000` in your browser to access the **Surrealist** dashboard. You can query your data with:

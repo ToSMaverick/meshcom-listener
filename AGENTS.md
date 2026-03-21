@@ -59,10 +59,10 @@ A high-performance, 12-factor compliant UDP listener for MeshCom nodes, utilizin
 - [x] Add `README.md` instructions for the new "one-click" deployment.
 
 ### Phase 5: Refinement & Production Readiness
-- [ ] **5.1 Config & Architecture:** Update OOTB defaults (e.g., `ws://surrealdb:8000`). Move data parsing (`src` splitting) from `database.py` to `listener.py`.
-- [ ] **5.2 Advanced Forwarding:** Implement message templates (✉️ msg, 📍 pos, 📡 raw). Add config filters: `FORWARD_TYPES`, `INCLUDE_DST`, `EXCLUDE_DST`, `EXCLUDE_SRC`.
-- [ ] **5.3 Housekeeping:** Implement async background task to prune `message` records older than `DB_RETENTION_DAYS` (default 7).
-- [ ] **5.4 CI/CD & Docs:** Change GitHub Actions to trigger on tags only. Add Plug & Play `docker-compose.yaml` to Readme. Create `CHANGELOG.md`.
+- [x] **5.1 Config & Architecture:** Update OOTB defaults (e.g., `ws://surrealdb:8000`). Move data parsing (`src` splitting) from `database.py` to `listener.py`.
+- [x] **5.2 Advanced Forwarding:** Implement message templates (✉️ msg, 📍 pos, 📡 raw). Add config filters: `FORWARD_TYPES`, `INCLUDE_DST`, `EXCLUDE_DST`, `EXCLUDE_SRC`.
+- [x] **5.3 Housekeeping:** Implement async background task to prune `message` records older than `DB_RETENTION_DAYS` (default 7).
+- [x] **5.4 CI/CD & Docs:** Change GitHub Actions to trigger on tags only. Add Plug & Play `docker-compose.yaml` to Readme. Created detailed `CHANGELOG.md`.
 
 ---
-**Status:** 🚧 In Progress: Phase 5 - Refinement
+**Status:** ✅ Project successfully modernized, refined and production-ready.

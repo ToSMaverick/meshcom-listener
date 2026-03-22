@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v2026.03.22] - Notification fine-tuning
+### Changed
+- **Refactor notification handling:** Update send_notification method to use structured data format
+
 ## [v2026.03.19] - Refinement & Production Readiness (Phase 5)
 ### Added
 - **Housekeeping:** Implemented an asynchronous background task to prune database records older than a configurable number of days (default: 7).

@@ -120,12 +120,19 @@ def test_notify():
     async def _test():
         try:
             typer.echo(f"Sending test notification via {config.APPRISE_URL}...")
-            success = await forwarder.send_notification({
-                "type": "status",
+            # Use the new structured format: msg_type, src, via, raw
+            test_data = {
+                "msg_type": "msg",
                 "src": "TEST-NODE",
-                "dst": "ADMIN",
-                "msg": "Connection Test: MeshCom Listener Notify works! ✅"
-            })
+                "via": ["GATEWAY-1", "GATEWAY-2"],
+                "raw": {
+                    "type": "msg",
+                    "src": "TEST-NODE",
+                    "dst": "ADMIN",
+                    "msg": "Connection Test: MeshCom Listener Notify works! ✅"
+                }
+            }
+            success = await forwarder.send_notification(test_data)
             if success:
                 typer.echo("✅ Apprise API call completed. Check your notification targets.")
             else:

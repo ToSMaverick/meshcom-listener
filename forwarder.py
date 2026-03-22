@@ -12,36 +12,42 @@ class AppriseForwarder:
         self.targets = config.NOTIFY_TARGETS
         self.enabled = config.NOTIFY_ENABLED
 
-    async def send_notification(self, message_dict: dict):
+    async def send_notification(self, data_dict: dict):
         """Send formatted message to Apprise API targets based on type."""
         if not self.enabled or not self.targets:
             return False
 
-        msg_type = message_dict.get("type", "unknown")
-        src = message_dict.get("src", "???")
-        dst = message_dict.get("dst", "???")
-        
+        msg_type = data_dict.get("msg_type", "unknown")
+        src = data_dict.get("src", "???")
+        via = data_dict.get("via", [])
+        raw_payload = data_dict.get("raw", {})
+
+        # Format source string with 'via' if present
+        via_display = ""
+        if via:
+            via_display += f"{', '.join(via)}"
+
         # --- Template Logic ---
         if msg_type == "msg":
-            msg_text = message_dict.get("msg", "")
+            msg_text = raw_payload.get("msg", "")
+            dst = raw_payload.get("dst", "???")
             title = f"✉️ from {src}"
-            body = f"To: {dst}\n\n{msg_text}"
-        
+            body = f"To: {dst}\nVia: {via_display}\n\n{msg_text}"
+
         elif msg_type == "pos":
-            lat = message_dict.get("lat", "?")
-            long = message_dict.get("long", "?")
-            alt = message_dict.get("alt", "?")
+            lat = raw_payload.get("lat", "?")
+            long = raw_payload.get("long", "?")
+            alt = raw_payload.get("alt", "?")
             title = f"📍 from {src}"
-            body = f"Lat: {lat}, Lon: {long}\nAlt: {alt}ft"
+            body = f"Via: {via_display}\nLat: {lat}, Lon: {long}\nAlt: {alt}ft"
             if lat != "?" and long != "?":
                 body += f"\n[OSM Map](https://www.openstreetmap.org/?mlat={lat}&mlon={long}#map=15/{lat}/{long})"
-        
+
         else:
             # Fallback for tele, status, ack, etc.
             title = f"📡 {msg_type.upper()} from {src}"
-            # Send the filtered raw dict (excluding bulky fields if any)
-            clean_raw = {k: v for k, v in message_dict.items() if k not in ["raw"]}
-            body = f"```json\n{json.dumps(clean_raw, indent=2)}\n```"
+            body = f"Via: {via_display}\n```json\n{json.dumps(raw_payload, indent=2)}\n```"
+
 
         payload = {
             "urls": ",".join(self.targets),

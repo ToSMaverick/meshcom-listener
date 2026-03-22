@@ -84,6 +84,6 @@ class MeshComProtocol(asyncio.DatagramProtocol):
                         log.debug(f"Notification suppressed: Destination {dst} is in EXCLUDE_DST.")
 
             if should_forward:
-                await self.forwarder.send_notification(message_dict)
+                await self.forwarder.send_notification(db_data)
             else:
                 log.debug(f"Notification skipped for {msg_type} from {sender} based on filters.")

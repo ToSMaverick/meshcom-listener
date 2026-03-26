@@ -5,23 +5,25 @@ WORKDIR /app
 
 # Install dependencies (cached)
 RUN --mount=type=cache,target=/root/.cache/uv \
-    --mount=type=bind,source=uv.lock,target=uv.lock \
-    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
+    --mount=type=bind,source=uv.lock,target=uv.lock,relabel=shared \
+    --mount=type=bind,source=pyproject.toml,target=pyproject.toml,relabel=shared \
     uv sync --frozen --no-install-project --no-dev
 
 # Stage 2: Final stage (Das reine Runtime-Image)
 FROM python:3.14-slim-trixie
 WORKDIR /app
 
-# Copy the installed packages from the builder
-COPY --from=builder /app/.venv /app/.venv
+# 1. Benutzer zuerst anlegen
+RUN useradd -m appuser
+
+# 2. Kopieren mit direktem chown (verhindert Layer-Duplizierung)
+COPY --from=builder --chown=appuser:appuser /app/.venv /app/.venv
 ENV PATH="/app/.venv/bin:$PATH"
 
-# Copy the application code
-COPY . .
+# 3. Code kopieren mit direktem chown
+COPY --chown=appuser:appuser . .
 
-# Security: Run as non-root user
-RUN useradd -m appuser && chown -R appuser /app
+# Wechsel zum non-root User
 USER appuser
 
 # UDP Port for MeshCom

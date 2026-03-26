@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v2026.03.26] - Image Optimization
+### Fixed
+- **Docker Optimization:** Refactored the `Dockerfile` to use `--chown` during copy operations, eliminating duplicate layers and reducing the final image size.
+
 ## [v2026.03.22] - Notification fine-tuning
 ### Changed
 - **Refactor notification handling:** Update send_notification method to use structured data format

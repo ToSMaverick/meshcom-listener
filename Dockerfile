@@ -5,8 +5,8 @@ WORKDIR /app
 
 # Install dependencies (cached)
 RUN --mount=type=cache,target=/root/.cache/uv \
-    --mount=type=bind,source=uv.lock,target=uv.lock,relabel=shared \
-    --mount=type=bind,source=pyproject.toml,target=pyproject.toml,relabel=shared \
+    --mount=type=bind,source=uv.lock,target=uv.lock \
+    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
     uv sync --frozen --no-install-project --no-dev
 
 # Stage 2: Final stage (Das reine Runtime-Image)

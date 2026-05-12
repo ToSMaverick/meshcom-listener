@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -59,6 +60,10 @@ func (c *Client) Send(ctx context.Context, message store.Message) (bool, error) 
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		details, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		if len(details) > 0 {
+			return false, fmt.Errorf("apprise returned status %s: %s", resp.Status, strings.TrimSpace(string(details)))
+		}
 		return false, fmt.Errorf("apprise returned status %s", resp.Status)
 	}
 	return true, nil

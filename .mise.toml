@@ -1,5 +1,5 @@
 [tools]
-python = "3.13"
+python = "latest"
 uv = "latest"
 
 [tasks.lint]

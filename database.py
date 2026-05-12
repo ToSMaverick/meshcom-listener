@@ -1,12 +1,16 @@
 import logging
 import os
+
 from surrealdb import AsyncSurreal
+
 from config import config
 
 log = logging.getLogger("meshcom.db")
 
+
 class SurrealHandler:
     """Handles async connection to SurrealDB."""
+
     def __init__(self):
         self.url = config.DB_URL
         self.user = config.DB_USER
@@ -19,17 +23,17 @@ class SurrealHandler:
         """Initialize connection to SurrealDB."""
         if self.db:
             return
-            
+
         log.info(f"Connecting to SurrealDB at {self.url}...")
         self.db = AsyncSurreal(self.url)
         await self.db.connect()
-        
+
         log.debug(f"Signing in as user '{self.user}'...")
         await self.db.signin({"username": self.user, "password": self.password})
-        
+
         log.debug(f"Using namespace '{self.namespace}' and database '{self.database}'...")
         await self.db.use(self.namespace, self.database)
-        
+
         log.info(f"Connected to DB {self.database} in namespace {self.namespace}.")
 
     async def init_schema(self, schema_file: str = "schema.surql"):
@@ -53,7 +57,7 @@ class SurrealHandler:
         try:
             # Table is now 'message' again
             result = await self.db.create("message", db_data)
-            
+
             # Robust logging of the ID
             record_id = "???"
             if result and isinstance(result, list):
@@ -61,7 +65,7 @@ class SurrealHandler:
                 record_id = first.get("id") if isinstance(first, dict) else first
             elif isinstance(result, dict):
                 record_id = result.get("id", "???")
-            
+
             log.debug(f"Saved {db_data['msg_type']} from {db_data['src']} to SurrealDB. ID: {record_id}")
         except Exception as e:
             log.error(f"Error saving message to SurrealDB: {e}")
@@ -70,7 +74,7 @@ class SurrealHandler:
         """Delete messages older than X days."""
         if not self.db:
             return
-        
+
         log.info(f"Housekeeping: Pruning messages older than {days} days...")
         try:
             # SurrealQL query to delete old records

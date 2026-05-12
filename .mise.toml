@@ -1,0 +1,15 @@
+[tools]
+python = "3.13"
+uv = "latest"
+
+[tasks.lint]
+description = "Run Ruff lint checks"
+run = "uv run --group dev ruff check ."
+
+[tasks.format]
+description = "Format Python files with Ruff"
+run = "uv run --group dev ruff format ."
+
+[tasks.format-check]
+description = "Check Python formatting with Ruff"
+run = "uv run --group dev ruff format --check ."

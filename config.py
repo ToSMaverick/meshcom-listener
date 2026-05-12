@@ -1,8 +1,10 @@
-from environs import Env
 from typing import List
+
+from environs import Env
 
 env = Env()
 env.read_env()  # Versucht automatisch eine .env Datei zu laden
+
 
 class Config:
     # --- Project Metadata ---
@@ -26,7 +28,7 @@ class Config:
     NOTIFY_ENABLED: bool = env.bool("NOTIFY_ENABLED", default=False)
     APPRISE_URL: str = env.str("APPRISE_URL", default="http://apprise:8000/notify")
     NOTIFY_TARGETS: List[str] = env.list("NOTIFY_TARGETS", default=[])
-    
+
     # --- Forwarding Filters ---
     FORWARD_TYPES: List[str] = env.list("FORWARD_TYPES", default=["msg", "pos"])
     FORWARD_INCLUDE_DST: List[str] = env.list("FORWARD_INCLUDE_DST", default=[])
@@ -35,6 +37,7 @@ class Config:
 
     # --- Logging ---
     LOG_LEVEL: str = env.str("LOG_LEVEL", default="INFO")
+
 
 # Singleton Instanz
 config = Config()

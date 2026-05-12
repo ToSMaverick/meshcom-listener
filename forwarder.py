@@ -1,12 +1,16 @@
-import httpx
-import logging
 import json
+import logging
+
+import httpx
+
 from config import config
 
 log = logging.getLogger("meshcom.forwarder")
 
+
 class AppriseForwarder:
     """Handles forwarding messages to Apprise API with templates."""
+
     def __init__(self):
         self.api_url = config.APPRISE_URL
         self.targets = config.NOTIFY_TARGETS
@@ -48,13 +52,12 @@ class AppriseForwarder:
             title = f"📡 {msg_type.upper()} from {src}"
             body = f"Via: {via_display}\n```json\n{json.dumps(raw_payload, indent=2)}\n```"
 
-
         payload = {
             "urls": ",".join(self.targets),
             "title": title,
             "body": body,
             "format": "markdown",
-            "type": "info"
+            "type": "info",
         }
 
         try:

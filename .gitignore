@@ -1,8 +1,10 @@
-/__pycache__
-/.venv
+/bin
+/data
 /db
 /logs
 .DS_Store
 .env
 .ruff_cache
-config.json
+*.db
+*.db-*
+*.log

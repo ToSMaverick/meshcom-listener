@@ -1,15 +1,26 @@
 [tools]
-python = "latest"
-uv = "latest"
+go = "1.26.3"
+
+[tasks.fmt]
+description = "Format Go files"
+run = "gofmt -w ."
 
 [tasks.lint]
-description = "Run Ruff lint checks"
-run = "uv run --group dev ruff check ."
+description = "Run Go vet"
+run = "go vet ./..."
 
-[tasks.format]
-description = "Format Python files with Ruff"
-run = "uv run --group dev ruff format ."
+[tasks.test]
+description = "Run Go tests"
+run = "go test ./..."
 
-[tasks.format-check]
-description = "Check Python formatting with Ruff"
-run = "uv run --group dev ruff format --check ."
+[tasks.build]
+description = "Build the listener binary"
+run = "go build -o bin/meshcom-listener ./cmd/meshcom-listener"
+
+[tasks.ci]
+description = "Run the full local CI suite"
+depends = ["lint", "test", "build"]
+
+[tasks.docker-build]
+description = "Build the Docker image"
+run = "docker build -t meshcom-listener:local ."

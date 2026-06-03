@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## Unreleased - Go Port
+### Added
+- Ported the listener runtime to Go with a Cobra CLI compatible with the previous command shape.
+- Added SQLite as the default backend using a pure-Go driver for low-resource hosts.
+- Added a database store interface and a SurrealDB stub that clearly reports unsupported status.
+- Added Mise-based Go tooling for format, lint, test, build, CI, and Docker build tasks.
+- Added Go unit and integration tests for config, listener filtering, Apprise payloads, and SQLite storage.
+
+### Changed
+- Replaced the Python/uv runtime and SurrealDB-first Docker setup with a Go multi-stage Dockerfile and SQLite-focused Docker Compose stack.
+- Updated documentation and environment examples for the Go/SQLite default path.
+
 ## [v2026.03.26] - Image Optimization
 ### Fixed
 - **Docker Optimization:** Refactored the `Dockerfile` to use `--chown` during copy operations, eliminating duplicate layers and reducing the final image size.

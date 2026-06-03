@@ -1,68 +1,70 @@
-# Project Architecture & Plan: MeshCom Listener (Surreal Edition)
+# Project Architecture: MeshCom Listener Go Port
 
-## 🎯 Vision
-A high-performance, 12-factor compliant UDP listener for MeshCom nodes, utilizing SurrealDB for advanced data analysis and Apprise for decoupled notifications. Designed for easy "one-click" deployment for radio amateurs.
+## Vision
 
-## 🏗 Architecture (12-Factor & Decoupled)
+A lightweight UDP listener for MeshCom LoRa nodes, optimized for small hosts. The Go port keeps the existing listener and Apprise forwarding behavior while replacing the SurrealDB-first runtime with a SQLite default backend.
 
-### 1. Codebase (I)
-- Single repository, tracked in Git.
+## Architecture
 
-### 2. Config (III)
-- **Tool:** `environs`.
-- All configuration is stored in environment variables.
-- `config.json` is deprecated. Overrides via `.env` or environment.
+### Runtime
 
-### 3. Backing Services (IV)
-- **Database:** SurrealDB (Async WebSocket/RPC).
-- **Notifications:** Apprise API (HTTP/POST).
-- **Auto-Init:** The application checks and initializes the SurrealDB schema on startup (`serve`).
+- Language: Go 1.26.3
+- Entry point: `cmd/meshcom-listener`
+- CLI: Cobra
+- Configuration: environment variables with optional `.env` loading
+- Listener: UDP JSON packet processing
+- Notifications: Apprise API over HTTP
+- Default database: SQLite via pure-Go `modernc.org/sqlite`
 
-### 4. CLI Interface (Typer)
-- `meshcom-listener serve`: Starts the async UDP listener (main entry point).
-- `meshcom-listener test config`: Displays current configuration (masked secrets).
-- `meshcom-listener test db`: Validates SurrealDB connection and schema.
-- `meshcom-listener test notify`: Validates Apprise connection and sends a test notification.
-- `meshcom-listener db init`: Manually triggers schema initialization (also runs automatically on `serve`).
-- `meshcom-listener db reset`: Wipe all data and re-initialize the schema.
-- `meshcom-listener version`: Shows application version and service status.
+### Backing Services
 
-## 🛠 Tech Stack
-- **Language:** Python 3.13+ (Asyncio)
-- **Dependency Management:** `uv` (using `pyproject.toml` and `uv.lock`)
-- **CLI Framework:** `typer`
-- **Env Management:** `environs`
-- **Database:** `surrealdb` (Python Async SDK)
-- **HTTP Client:** `httpx` (for Apprise API)
-- **Deployment:** Docker Multi-stage (uv-based)
-- **CI/CD:** GitHub Actions -> GitHub Container Registry (GHCR)
+- `DB_BACKEND=sqlite` is the production default.
+- `DB_SQLITE_PATH=/data/meshcom.db` is the Docker default.
+- SurrealDB is reserved behind the store interface but is not implemented in the first Go port.
+- Apprise remains optional and is enabled with `NOTIFY_ENABLED=true` plus `NOTIFY_TARGETS`.
 
-## 📋 Implementation Plan
+### Store Interface
 
-### Phase 1: Modern Tooling & Config (12-Factor Foundation)
-- [x] Initialize `uv` project and create `pyproject.toml`.
-- [x] Implement `config.py` using `environs` (Mapping env vars to a clean object).
-- [x] Create `main.py` with `typer` structure and command stubs.
-- [x] Cleanup: Remove old `requirements.txt` and `if __name__ == "__main__":` blocks.
+All database backends implement:
 
-### Phase 2: Async Core & Backing Services
-- [x] Implement `database.py`: Async SurrealDB client with auto-init logic.
-- [x] Implement `forwarder.py`: Async Apprise client using `httpx`.
-- [x] Refactor `listener.py`: Convert to `asyncio.DatagramProtocol`.
+- `Connect`
+- `Init`
+- `SaveMessage`
+- `PruneOldMessages`
+- `Ping`
+- `Reset`
+- `Close`
 
-### Phase 3: Infrastructure & Deployment
-- [x] Create `docker-compose.yaml` (SurrealDB + Apprise + Listener).
-- [x] Optimize `Dockerfile` (Multi-stage with `uv` for minimal image size).
+SQLite stores full raw packets in `message.raw`, structured metadata in dedicated columns, and last-seen node state in `node`.
 
-### Phase 4: CI/CD & Release
-- [x] Create GitHub Action for automated build and push to GHCR.
-- [x] Add `README.md` instructions for the new "one-click" deployment.
+### CLI
 
-### Phase 5: Refinement & Production Readiness
-- [x] **5.1 Config & Architecture:** Update OOTB defaults (e.g., `ws://surrealdb:8000`). Move data parsing (`src` splitting) from `database.py` to `listener.py`.
-- [x] **5.2 Advanced Forwarding:** Implement message templates (✉️ msg, 📍 pos, 📡 raw). Add config filters: `FORWARD_TYPES`, `INCLUDE_DST`, `EXCLUDE_DST`, `EXCLUDE_SRC`.
-- [x] **5.3 Housekeeping:** Implement async background task to prune `message` records older than `DB_RETENTION_DAYS` (default 7).
-- [x] **5.4 CI/CD & Docs:** Change GitHub Actions to trigger on tags only. Add Plug & Play `docker-compose.yaml` to Readme. Created detailed `CHANGELOG.md`.
+- `meshcom-listener serve`
+- `meshcom-listener test config`
+- `meshcom-listener test db`
+- `meshcom-listener test notify`
+- `meshcom-listener db init`
+- `meshcom-listener db reset`
+- `meshcom-listener version`
 
----
-**Status:** ✅ Project successfully modernized, refined and production-ready.
+## Tooling
+
+Mise is the project task runner and pins Go:
+
+- `mise run fmt`
+- `mise run lint`
+- `mise run test`
+- `mise run build`
+- `mise run ci`
+- `mise run docker-build`
+
+GitHub Actions runs `mise run ci` before the Docker Buildx publish job.
+
+## Deployment
+
+The default Docker Compose stack contains:
+
+- `listener`
+- `apprise`
+
+SQLite data is persisted through `./data:/data`. SurrealDB is intentionally not part of the default compose file.

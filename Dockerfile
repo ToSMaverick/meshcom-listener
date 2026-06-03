@@ -1,34 +1,21 @@
-# Stage 1: Build stage
-FROM ghcr.io/astral-sh/uv:python3.14-trixie AS builder
-ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy
+FROM golang:1.26.3-bookworm AS builder
 WORKDIR /app
 
-# Install dependencies (cached)
-RUN --mount=type=cache,target=/root/.cache/uv \
-    --mount=type=bind,source=uv.lock,target=uv.lock \
-    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
-    uv sync --frozen --no-install-project --no-dev
+COPY go.mod go.sum* ./
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download
 
-# Stage 2: Final stage (Das reine Runtime-Image)
-FROM python:3.14-slim-trixie
-WORKDIR /app
+COPY . .
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /meshcom-listener ./cmd/meshcom-listener
 
-# 1. Benutzer zuerst anlegen
-RUN useradd -m appuser
+FROM gcr.io/distroless/static-debian12:nonroot
 
-# 2. Kopieren mit direktem chown (verhindert Layer-Duplizierung)
-COPY --from=builder --chown=appuser:appuser /app/.venv /app/.venv
-ENV PATH="/app/.venv/bin:$PATH"
+WORKDIR /
+COPY --from=builder /meshcom-listener /meshcom-listener
 
-# 3. Code kopieren mit direktem chown
-COPY --chown=appuser:appuser . .
-
-# Wechsel zum non-root User
-USER appuser
-
-# UDP Port for MeshCom
+VOLUME ["/data"]
 EXPOSE 1799/udp
 
-# Standard-Kommando
-ENTRYPOINT ["python", "main.py"]
+ENTRYPOINT ["/meshcom-listener"]
 CMD ["serve"]

@@ -1,92 +1,89 @@
-# MeshCom Listener (Surreal Edition)
+# MeshCom Listener
 
-A high-performance, asynchronous Python application designed to listen for UDP packets broadcast by MeshCom nodes. It utilizes **SurrealDB** for advanced data analysis and **Apprise** for flexible notifications.
+A small Go UDP listener for MeshCom nodes. It receives JSON packets, stores them in SQLite, keeps a compact node table, and can forward selected messages through an Apprise API service.
 
-## 🚀 Key Features
+## Features
 
-*   **Async Core:** Built with Python `asyncio` for high-throughput UDP handling.
-*   **SurrealDB Integration:** Stores messages in a hybrid schema (fixed metadata + full raw payload).
-*   **Smart Node Tracking:** Automatically maintains a "Last Seen" list of all MeshCom nodes, including their last known positions.
-*   **Apprise Notifications:** Forward messages to over 100+ platforms (Telegram, Discord, Email, etc.) via a decoupled Apprise API.
-*   **12-Factor Ready:** Fully configurable via environment variables.
-*   **One-Click Deployment:** Docker Compose stack with pre-built images from GitHub Container Registry (GHCR).
+- UDP listener for MeshCom JSON packets on port `1799/udp`.
+- SQLite default backend for low-memory hosts.
+- Store interface prepared for future backends; SurrealDB is currently a stub in the Go port.
+- Apprise forwarding with message, position, and raw fallback templates.
+- Environment-variable configuration with optional `.env` file loading.
+- Mise-based local tooling.
+- Docker Compose deployment with persistent SQLite data in `./data`.
 
-## 🛠 Tech Stack
+## Quick Start
 
-*   **Language:** Python 3.14+
-*   **Database:** [SurrealDB](https://surrealdb.com/) (Graph/Document hybrid)
-*   **Notification Gateway:** [Apprise API](https://github.com/caronc/apprise-api)
-*   **Dependency Management:** `uv`
-*   **Containerization:** Docker & GHCR
+Create `.env` from `.env.example`, then start the stack:
 
-## 📦 Quick Start (Docker Compose)
+```bash
+docker compose up -d
+```
 
-The easiest way to run the listener is using the pre-built image from GHCR.
+The listener stores SQLite data at `./data/meshcom.db` by default.
 
-1.  **Create a `docker-compose.yaml`:**
-    ```yaml
-    version: "3.9"
-    services:
-      listener:
-        image: ghcr.io/tosmaverick/meshcom-listener:latest
-        container_name: meshcom-listener
-        restart: unless-stopped
-        ports:
-          - "1799:1799/udp"
-        environment:
-          - DB_URL=ws://surrealdb:8000
-          - APPRISE_URL=http://apprise:8000/notify
-          # - NOTIFY_ENABLED=true
-          # - NOTIFY_TARGETS=tgram://bottoken/chatid
-        depends_on:
-          - surrealdb
-          - apprise
+## Configuration
 
-      surrealdb:
-        image: surrealdb/surrealdb:latest
-        container_name: meshcom-db
-        command: start --user root --pass root --log info file:/mydata/meshcom.db
-        ports:
-          - "8000:8000"
-        volumes:
-          - ./db:/mydata
-        restart: unless-stopped
+Important environment variables:
 
-      apprise:
-        image: caronc/apprise
-        container_name: meshcom-apprise
-        restart: unless-stopped
-    ```
+| Variable | Default | Description |
+| --- | --- | --- |
+| `LISTENER_HOST` | `0.0.0.0` | UDP bind address |
+| `LISTENER_PORT` | `1799` | UDP bind port |
+| `STORE_TYPES` | `msg,pos,tele` | Message types stored in the database; `*` stores all |
+| `DB_BACKEND` | `sqlite` | `sqlite` is implemented; `surrealdb` is reserved |
+| `DB_SQLITE_PATH` | `/data/meshcom.db` | SQLite database path |
+| `DB_RETENTION_DAYS` | `7` | Retention period for stored messages |
+| `NOTIFY_ENABLED` | `false` | Enables Apprise forwarding |
+| `APPRISE_URL` | `http://apprise:8000/notify` | Apprise API endpoint |
+| `NOTIFY_TARGETS` | empty | Comma-separated Apprise target URLs |
+| `FORWARD_TYPES` | `msg,pos` | Message types forwarded to Apprise |
+| `FORWARD_INCLUDE_DST` | empty | Optional destination allow-list for `msg` packets |
+| `FORWARD_EXCLUDE_DST` | `*` | Destination block-list for `msg` packets |
+| `FORWARD_EXCLUDE_SRC` | empty | Source block-list for `msg` packets |
 
-2.  **Start the Stack:**
-    ```bash
-    docker-compose up -d
-    ```
+## CLI
 
-3.  **Explore your Data:**
-    Open `http://localhost:8000` in your browser to access the **Surrealist** dashboard. You can query your data with:
-    ```sql
-    SELECT * FROM message ORDER BY time DESC;
-    SELECT * FROM node;
-    ```
+```bash
+meshcom-listener serve
+meshcom-listener test config
+meshcom-listener test db
+meshcom-listener test notify
+meshcom-listener db init
+meshcom-listener db reset
+meshcom-listener version
+```
 
-## ⌨️ CLI Commands
+For local development:
 
-If you want to run or test the listener locally (using `uv`):
+```bash
+mise run fmt
+mise run lint
+mise run test
+mise run build
+```
 
-*   `uv run main.py serve`: Start the listener.
-*   `uv run main.py test db`: Test connection to SurrealDB.
-*   `uv run main.py test notify`: Send a test notification.
-*   `uv run main.py db init`: Apply the database schema (idempotent).
-*   `uv run main.py db reset`: **Wipe all data** and re-initialize the schema.
+With Nix:
 
-## 📡 Developer Info
+```bash
+nix develop
+mise trust
+mise install
+mise run ci
 
-The database uses a hybrid schema in the `message` table:
-*   `src`: The original sender (Callsign).
-*   `via`: An array of routing nodes.
-*   `msg_type`: The message type (pos, msg, tele, etc.).
-*   `raw`: The complete original JSON packet for future-proof analysis.
+nix build
+nix run . -- version
+```
 
----
+## Data Model
+
+SQLite uses two tables:
+
+- `message`: full packet history with metadata (`src`, `via`, `src_type`, `msg_type`) and raw JSON.
+- `node`: last-seen state per source, including the latest position for `pos` packets.
+
+## Go Port Status
+
+The Go port replaces the previous Python/SurrealDB runtime on this branch. SQLite is production-ready for this first Go version. The SurrealDB backend remains behind the store interface and returns a clear unsupported error until implemented.
+
 73 de OE3MIF

@@ -63,6 +63,18 @@ mise run test
 mise run build
 ```
 
+With Nix:
+
+```bash
+nix develop
+mise trust
+mise install
+mise run ci
+
+nix build
+nix run . -- version
+```
+
 ## Data Model
 
 SQLite uses two tables:

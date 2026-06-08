@@ -14,13 +14,52 @@ A small Go UDP listener for MeshCom nodes. It receives JSON packets, stores them
 
 ## Quick Start
 
-Create `.env` from `.env.example`, then start the stack:
+Create `.env` from `.env.example`, then start the prebuilt image with Docker Compose:
+
+```yaml
+services:
+  listener:
+    image: ghcr.io/tosmaverick/meshcom-listener:latest
+    container_name: meshcom-listener
+    restart: always
+    volumes:
+      - ./data:/data
+    ports:
+      - 1799:1799/udp
+    env_file: .env
+    depends_on:
+      - apprise
+
+  apprise:
+    image: caronc/apprise
+    container_name: meshcom-apprise
+    restart: always
+    ports:
+      - 8001:8000
+
+  sqlite-web:
+    image: ghcr.io/coleifer/sqlite-web:latest
+    container_name: meshcom-sqlite-web
+    restart: always
+    ports:
+      - 8002:8080
+    volumes:
+      - ./data:/data
+    command:
+      - meshcom.db
+      - --host=0.0.0.0
+      - --read-only
+    depends_on:
+      - listener
+```
 
 ```bash
 docker compose up -d
 ```
 
-The listener stores SQLite data at `./data/meshcom.db` by default.
+The listener stores SQLite data at `./data/meshcom.db` by default. `sqlite-web`
+is optional, but useful for checking and querying the database file in a browser
+at `http://localhost:8002`.
 
 ## Configuration
 
